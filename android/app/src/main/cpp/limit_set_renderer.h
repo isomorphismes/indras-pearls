@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "group_state.h"
+#include "parameter_controls.h"
 
 struct limit_set_renderer {
     GLuint program;
@@ -18,6 +19,10 @@ struct limit_set_renderer {
     GLint b_location;
     GLint c_location;
     GLint d_location;
+    GLint parameter_center_location;
+    GLint parameter_value_location;
+    GLint parameter_radius_location;
+    GLint active_parameter_location;
 };
 
 bool initialize_limit_set_renderer(struct limit_set_renderer *renderer);
@@ -25,6 +30,7 @@ void terminate_limit_set_renderer(struct limit_set_renderer *renderer);
 void draw_limit_set(
     const struct limit_set_renderer *renderer,
     const struct limit_set_group *group,
+    const struct complex_parameter_controls *controls,
     float center_x,
     float center_y,
     float scale,
