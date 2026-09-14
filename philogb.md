@@ -9,13 +9,17 @@ This project was prompted in part by Nico Belmonte's interactive WebGPU explorat
 - Video, "Indra's pearls interactive": https://www.youtube.com/watch?v=6Gd3fnSK_d4
 - Public GitHub deployment repository: https://github.com/philogb/page
 - Deployed `indraspearls/` directory: https://github.com/philogb/page/tree/gh-pages/indraspearls
+- Deployed WebGPU application bundle referenced by the original page: https://github.com/philogb/page/blob/gh-pages/indraspearls/js/main.efe6d0d185ecaedf2f31.bundle.js
+- Generated third-party bundle license notices: https://github.com/philogb/page/blob/gh-pages/indraspearls/js/main.efe6d0d185ecaedf2f31.bundle.js.LICENSE.txt
 - Commit that introduced the deployed visualization: https://github.com/philogb/page/commit/23b79b95981a5103a3870f63ef2e0636dd0faf07
 - Hacker News discussion submitted by `philogb`: https://news.ycombinator.com/item?id=40098597
 
 ## Nico Belmonte
 
+- Personal site: https://philogb.github.io/
 - GitHub: https://github.com/philogb
 - Medium: https://medium.com/@philogb
+- CV / work overview: https://philogb.github.io/cv.html
 
 ## License note
 
