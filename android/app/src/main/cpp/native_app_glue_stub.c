@@ -13,6 +13,7 @@
 
 #include "group_state.h"
 #include "limit_set_renderer.h"
+#include "parameter_controls.h"
 
 #define LOG_TAG "IndrasPearls"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -34,6 +35,7 @@ struct engine {
 
     struct camera camera;
     struct limit_set_group group;
+    struct complex_parameter_controls parameter_controls;
     struct limit_set_renderer renderer;
 
     bool dragging;
@@ -179,6 +181,7 @@ static void draw_frame(struct engine *engine) {
     draw_limit_set(
         &engine->renderer,
         &engine->group,
+        &engine->parameter_controls,
         engine->camera.center_x,
         engine->camera.center_y,
         engine->camera.scale,
@@ -203,14 +206,33 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
     size_t pointer_count = AMotionEvent_getPointerCount(event);
 
     switch (masked_action) {
-        case AMOTION_EVENT_ACTION_DOWN:
+        case AMOTION_EVENT_ACTION_DOWN: {
+            float x = AMotionEvent_getX(event, 0);
+            float y = AMotionEvent_getY(event, 0);
+            if (begin_complex_parameter_drag(
+                    &engine->parameter_controls,
+                    x,
+                    y,
+                    engine->width,
+                    engine->height
+                )) {
+                engine->dragging = false;
+                engine->pinching = false;
+                engine->dirty = true;
+                return 1;
+            }
+
             engine->dragging = pointer_count == 1;
             engine->pinching = false;
-            engine->last_x = AMotionEvent_getX(event, 0);
-            engine->last_y = AMotionEvent_getY(event, 0);
+            engine->last_x = x;
+            engine->last_y = y;
             return 1;
+        }
 
         case AMOTION_EVENT_ACTION_POINTER_DOWN:
+            if (engine->parameter_controls.active_index >= 0) {
+                return 1;
+            }
             if (pointer_count >= 2) {
                 engine->dragging = false;
                 engine->pinching = true;
@@ -219,6 +241,19 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             return 1;
 
         case AMOTION_EVENT_ACTION_MOVE:
+            if (engine->parameter_controls.active_index >= 0) {
+                if (pointer_count >= 1 && update_complex_parameter_drag(
+                        &engine->parameter_controls,
+                        AMotionEvent_getX(event, 0),
+                        AMotionEvent_getY(event, 0),
+                        engine->width,
+                        engine->height
+                    )) {
+                    engine->dirty = true;
+                }
+                return 1;
+            }
+
             if (pointer_count >= 2) {
                 float span = pointer_span(event);
                 if (!engine->pinching) {
@@ -257,14 +292,21 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             break;
 
         case AMOTION_EVENT_ACTION_POINTER_UP:
+            if (engine->parameter_controls.active_index >= 0) {
+                end_complex_parameter_drag(&engine->parameter_controls);
+                engine->dirty = true;
+                return 1;
+            }
             engine->pinching = false;
             engine->dragging = false;
             return 1;
 
         case AMOTION_EVENT_ACTION_UP:
         case AMOTION_EVENT_ACTION_CANCEL:
+            end_complex_parameter_drag(&engine->parameter_controls);
             engine->dragging = false;
             engine->pinching = false;
+            engine->dirty = true;
             return 1;
 
         default:
@@ -310,6 +352,7 @@ void android_main(struct android_app *app) {
     engine.camera.center_y = 0.0f;
     engine.camera.scale = 4.0f;
     initialize_bundled_limit_set_group(&engine.group);
+    initialize_complex_parameter_controls(&engine.parameter_controls);
     engine.dirty = true;
 
     app->userData = &engine;

@@ -11,6 +11,7 @@ target_include_directories(native_app_glue PUBLIC "${NATIVE_GLUE_DIR}")
 add_library(indras_pearls SHARED
     group_state.c
     limit_set_renderer.c
+    parameter_controls.c
     native_app_glue_stub.c
 )
 target_compile_features(indras_pearls PRIVATE c_std_11)

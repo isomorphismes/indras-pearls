@@ -23,6 +23,7 @@ static const char *fragment_shader_source =
     "precision highp float;\n"
     "\n"
     "const int REGION_COUNT = 4;\n"
+    "const int PARAMETER_COUNT = 3;\n"
     "const int MAX_STEPS = 24;\n"
     "\n"
     "uniform vec2 u_center;\n"
@@ -34,6 +35,10 @@ static const char *fragment_shader_source =
     "uniform vec2 u_b[REGION_COUNT];\n"
     "uniform vec2 u_c[REGION_COUNT];\n"
     "uniform vec2 u_d[REGION_COUNT];\n"
+    "uniform vec2 u_parameter_center[PARAMETER_COUNT];\n"
+    "uniform vec2 u_parameter_value[PARAMETER_COUNT];\n"
+    "uniform float u_parameter_radius;\n"
+    "uniform int u_active_parameter;\n"
     "\n"
     "out vec4 fragment_color;\n"
     "\n"
@@ -71,6 +76,49 @@ static const char *fragment_shader_source =
     "    return -1;\n"
     "}\n"
     "\n"
+    "vec3 parameter_color(int index) {\n"
+    "    if (index == 0) {\n"
+    "        return vec3(0.34, 0.72, 1.00);\n"
+    "    }\n"
+    "    if (index == 1) {\n"
+    "        return vec3(1.00, 0.72, 0.34);\n"
+    "    }\n"
+    "    return vec3(0.62, 0.96, 0.64);\n"
+    "}\n"
+    "\n"
+    "vec3 draw_parameter_controls(vec3 base_color) {\n"
+    "    vec3 color = base_color;\n"
+    "    for (int index = 0; index < PARAMETER_COUNT; ++index) {\n"
+    "        vec2 local = (gl_FragCoord.xy - u_parameter_center[index]) / u_parameter_radius;\n"
+    "        float distance_from_center = length(local);\n"
+    "        if (distance_from_center > 1.08) {\n"
+    "            continue;\n"
+    "        }\n"
+    "\n"
+    "        vec3 accent = parameter_color(index);\n"
+    "        float inside = 1.0 - smoothstep(0.96, 1.0, distance_from_center);\n"
+    "        color = mix(color, vec3(0.025, 0.030, 0.042), inside * 0.72);\n"
+    "\n"
+    "        float horizontal_axis = 1.0 - smoothstep(0.012, 0.030, abs(local.y));\n"
+    "        float vertical_axis = 1.0 - smoothstep(0.012, 0.030, abs(local.x));\n"
+    "        float axes = max(horizontal_axis, vertical_axis) * inside;\n"
+    "        color = mix(color, vec3(0.56, 0.59, 0.66), axes * 0.30);\n"
+    "\n"
+    "        float rim = 1.0 - smoothstep(0.018, 0.045, abs(distance_from_center - 1.0));\n"
+    "        color = mix(color, accent, rim * 0.88);\n"
+    "\n"
+    "        float handle_distance = length(local - u_parameter_value[index]);\n"
+    "        float handle = 1.0 - smoothstep(0.065, 0.105, handle_distance);\n"
+    "        color = mix(color, accent, handle);\n"
+    "\n"
+    "        if (index == u_active_parameter) {\n"
+    "            float active_ring = 1.0 - smoothstep(0.018, 0.050, abs(distance_from_center - 0.90));\n"
+    "            color = mix(color, accent, active_ring * 0.48);\n"
+    "        }\n"
+    "    }\n"
+    "    return color;\n"
+    "}\n"
+    "\n"
     "void main() {\n"
     "    vec2 pixel_from_center = gl_FragCoord.xy - 0.5 * u_resolution;\n"
     "    vec2 z = u_center + pixel_from_center * (u_scale / u_resolution.y);\n"
@@ -97,7 +145,8 @@ static const char *fragment_shader_source =
     "    vec3 cool = vec3(0.36, 0.66, 0.92);\n"
     "    vec3 warm = vec3(0.92, 0.74, 0.44);\n"
     "    vec3 pearl = (last_region == 0 || last_region == 1) ? cool : warm;\n"
-    "    fragment_color = vec4(mix(background, pearl, brightness), 1.0);\n"
+    "    vec3 color = mix(background, pearl, brightness);\n"
+    "    fragment_color = vec4(draw_parameter_controls(color), 1.0);\n"
     "}\n";
 
 static GLuint compile_shader(GLenum shader_type, const char *source) {
@@ -134,6 +183,10 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
     renderer->b_location = glGetUniformLocation(renderer->program, "u_b[0]");
     renderer->c_location = glGetUniformLocation(renderer->program, "u_c[0]");
     renderer->d_location = glGetUniformLocation(renderer->program, "u_d[0]");
+    renderer->parameter_center_location = glGetUniformLocation(renderer->program, "u_parameter_center[0]");
+    renderer->parameter_value_location = glGetUniformLocation(renderer->program, "u_parameter_value[0]");
+    renderer->parameter_radius_location = glGetUniformLocation(renderer->program, "u_parameter_radius");
+    renderer->active_parameter_location = glGetUniformLocation(renderer->program, "u_active_parameter");
 
     return renderer->center_location >= 0 &&
         renderer->scale_location >= 0 &&
@@ -143,7 +196,11 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
         renderer->a_location >= 0 &&
         renderer->b_location >= 0 &&
         renderer->c_location >= 0 &&
-        renderer->d_location >= 0;
+        renderer->d_location >= 0 &&
+        renderer->parameter_center_location >= 0 &&
+        renderer->parameter_value_location >= 0 &&
+        renderer->parameter_radius_location >= 0 &&
+        renderer->active_parameter_location >= 0;
 }
 
 bool initialize_limit_set_renderer(struct limit_set_renderer *renderer) {
@@ -241,9 +298,30 @@ static void copy_mobius_coefficients(
     }
 }
 
+static void copy_parameter_controls(
+    float centers[COMPLEX_PARAMETER_COUNT * 2],
+    float values[COMPLEX_PARAMETER_COUNT * 2],
+    const struct complex_parameter_controls *controls,
+    int width,
+    int height
+) {
+    for (int index = 0; index < COMPLEX_PARAMETER_COUNT; ++index) {
+        complex_parameter_control_center(
+            index,
+            width,
+            height,
+            &centers[index * 2],
+            &centers[index * 2 + 1]
+        );
+        values[index * 2] = controls->value[index].real;
+        values[index * 2 + 1] = controls->value[index].imaginary;
+    }
+}
+
 void draw_limit_set(
     const struct limit_set_renderer *renderer,
     const struct limit_set_group *group,
+    const struct complex_parameter_controls *controls,
     float center_x,
     float center_y,
     float scale,
@@ -255,9 +333,12 @@ void draw_limit_set(
     float b[LIMIT_SET_REGION_COUNT * 2];
     float c[LIMIT_SET_REGION_COUNT * 2];
     float d[LIMIT_SET_REGION_COUNT * 2];
+    float parameter_centers[COMPLEX_PARAMETER_COUNT * 2];
+    float parameter_values[COMPLEX_PARAMETER_COUNT * 2];
 
     copy_complex_values(circle_centers, group->circle_center);
     copy_mobius_coefficients(a, b, c, d, group->exit_map);
+    copy_parameter_controls(parameter_centers, parameter_values, controls, width, height);
 
     glViewport(0, 0, width, height);
     glUseProgram(renderer->program);
@@ -275,6 +356,21 @@ void draw_limit_set(
     glUniform2fv(renderer->b_location, LIMIT_SET_REGION_COUNT, b);
     glUniform2fv(renderer->c_location, LIMIT_SET_REGION_COUNT, c);
     glUniform2fv(renderer->d_location, LIMIT_SET_REGION_COUNT, d);
+    glUniform2fv(
+        renderer->parameter_center_location,
+        COMPLEX_PARAMETER_COUNT,
+        parameter_centers
+    );
+    glUniform2fv(
+        renderer->parameter_value_location,
+        COMPLEX_PARAMETER_COUNT,
+        parameter_values
+    );
+    glUniform1f(
+        renderer->parameter_radius_location,
+        complex_parameter_control_radius(width, height)
+    );
+    glUniform1i(renderer->active_parameter_location, controls->active_index);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
