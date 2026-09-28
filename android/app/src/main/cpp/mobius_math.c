@@ -339,7 +339,7 @@ bool classical_circle_presentation_derive(struct marked_rank_two_group group,
 enum family_domain_status symmetric_classical_family_make(double radius,
                                                            struct marked_rank_two_group *group) {
     if (group == NULL || !isfinite(radius) || radius <= 0.0) {
-        return FAMILY_DOMAIN_LOWER_BOUNDARY_OR_INVALID;
+        return FAMILY_PARAMETER_INVALID;
     }
     const double inverse_radius = 1.0 / radius;
     const double radius_squared = radius * radius;
@@ -358,7 +358,7 @@ enum family_domain_status symmetric_classical_family_make(double radius,
         .d = imaginary_inverse_radius,
     };
     if (!mobius_is_sl2(group->A, 1.0e-12) || !mobius_is_sl2(group->B, 1.0e-12)) {
-        return FAMILY_DOMAIN_LOWER_BOUNDARY_OR_INVALID;
+        return FAMILY_NUMERICALLY_UNREPRESENTABLE;
     }
     const double tangent_radius = 1.0 / sqrt(2.0);
     if (radius < tangent_radius) {

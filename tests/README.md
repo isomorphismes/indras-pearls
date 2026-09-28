@@ -33,3 +33,7 @@ The executable prints the number of assertions it ran. Its cases cover:
 | Fixed points | Projective fixed-point equation, bundled closed forms, and local multipliers |
 | Circle presentation | `|cz+d|=1`, boundary-to-paired-boundary mapping, interior-to-exterior mapping, four-circle pairing, positive disjointness margin, and disjoint/tangent/overlap classification |
 | Family boundary and reconstruction | Strict `0<r<1/√2` interior status, tangent boundary, overlap rejection, exact `r=0.7` renderer coefficients, and continuity away from the boundary |
+
+The family constructor reports a positive parameter that cannot be represented
+with a determinant-one binary64 matrix as `FAMILY_NUMERICALLY_UNREPRESENTABLE`;
+that numerical limit is separate from the mathematical open domain.

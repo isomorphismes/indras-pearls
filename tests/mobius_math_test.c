@@ -1,5 +1,6 @@
 #include "mobius_math.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -278,11 +279,14 @@ static void test_isometric_circles_and_validation(void) {
 static void test_domain_reconstruction_and_continuity(void) {
     struct marked_rank_two_group invalid_group;
     CHECK(symmetric_classical_family_make(0.0, &invalid_group) ==
-              FAMILY_DOMAIN_LOWER_BOUNDARY_OR_INVALID,
+              FAMILY_PARAMETER_INVALID,
           "r=0 is rejected");
     CHECK(symmetric_classical_family_make(-0.1, &invalid_group) ==
-              FAMILY_DOMAIN_LOWER_BOUNDARY_OR_INVALID,
+              FAMILY_PARAMETER_INVALID,
           "negative r is rejected");
+    CHECK(symmetric_classical_family_make(DBL_MIN, &invalid_group) ==
+              FAMILY_NUMERICALLY_UNREPRESENTABLE,
+          "positive r below binary64 construction range is distinct from domain invalidity");
     const double tangent_radius = 1.0 / sqrt(2.0);
     struct marked_rank_two_group boundary_group;
     CHECK(symmetric_classical_family_make(tangent_radius, &boundary_group) ==
