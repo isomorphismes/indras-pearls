@@ -8,6 +8,16 @@ permissions:
   contents: read
 
 jobs:
+  host-mathematics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run deterministic host mathematics tests
+        run: |
+          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
+          /tmp/indras-pearls-mobius-math-test
+
   android:
     runs-on: ubuntu-latest
     steps:
@@ -19,6 +29,8 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android toolchain
         run: |
