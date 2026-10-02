@@ -1,4 +1,5 @@
 #include "mobius_math.h"
+#include "renderer_packet.h"
 
 #include <float.h>
 #include <math.h>
@@ -371,12 +372,64 @@ static void test_domain_reconstruction_and_continuity(void) {
           "fixed points vary continuously away from the domain boundary");
 }
 
+
+static void test_renderer_packet_boundary(void) {
+    float packet[RENDERER_PACKET_FLOAT_COUNT];
+    for (int index = 0; index < RENDERER_PACKET_FLOAT_COUNT; ++index) {
+        packet[index] = 123.0f;
+    }
+
+    CHECK(symmetric_classical_renderer_packet(0.7f, packet) == RENDERER_PACKET_OK,
+          "r=0.7 produces a renderer packet");
+
+    const float expected_centers[LIMIT_SET_REGION_COUNT * 2] = {
+        -1.0f, 0.0f,
+         1.0f, 0.0f,
+         0.0f, -1.0f,
+         0.0f, 1.0f,
+    };
+    for (int index = 0; index < LIMIT_SET_REGION_COUNT * 2; ++index) {
+        CHECK(fabs((double)packet[RENDERER_PACKET_CIRCLE_CENTER_OFFSET + index] -
+                   (double)expected_centers[index]) <= 2.0e-6,
+              "renderer packet preserves derived circle centers");
+    }
+    for (int region = 0; region < LIMIT_SET_REGION_COUNT; ++region) {
+        CHECK(fabs((double)packet[RENDERER_PACKET_CIRCLE_RADIUS_SQUARED_OFFSET + region] -
+                   0.49) <= 2.0e-6,
+              "renderer packet carries one radius squared per circle");
+    }
+
+    const double ten_sevenths = 10.0 / 7.0;
+    CHECK(fabs((double)packet[RENDERER_PACKET_A_OFFSET] - ten_sevenths) <= 2.0e-6 &&
+          fabs((double)packet[RENDERER_PACKET_B_OFFSET] - (51.0 / 70.0)) <= 2.0e-6 &&
+          fabs((double)packet[RENDERER_PACKET_C_OFFSET] - ten_sevenths) <= 2.0e-6 &&
+          fabs((double)packet[RENDERER_PACKET_D_OFFSET] - ten_sevenths) <= 2.0e-6,
+          "renderer packet reproduces the first bundled Mobius map");
+
+    float rejected[RENDERER_PACKET_FLOAT_COUNT];
+    for (int index = 0; index < RENDERER_PACKET_FLOAT_COUNT; ++index) {
+        rejected[index] = -77.0f;
+    }
+    CHECK(symmetric_classical_renderer_packet(0.72f, rejected) ==
+              RENDERER_PACKET_OUTSIDE_CLASSICAL_DOMAIN,
+          "renderer packet rejects overlapping family state");
+    int unchanged = 1;
+    for (int index = 0; index < RENDERER_PACKET_FLOAT_COUNT; ++index) {
+        if (rejected[index] != -77.0f) {
+            unchanged = 0;
+            break;
+        }
+    }
+    CHECK(unchanged, "failed renderer packet construction preserves output");
+}
+
 int main(void) {
     test_canonical_group_and_trace_identities();
     test_projective_action_and_composition();
     test_fixed_points_and_multipliers();
     test_isometric_circles_and_validation();
     test_domain_reconstruction_and_continuity();
+    test_renderer_packet_boundary();
     if (failures != 0) {
         fprintf(stderr, "%d test assertion(s) failed\n", failures);
         return EXIT_FAILURE;
