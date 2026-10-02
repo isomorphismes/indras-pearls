@@ -49,3 +49,33 @@ Android NDK r29 Clang/lld perform the final shared-library link with
 Only an ordinary `float` radius, integer status, and flat float array cross
 between ICK-compiled code and NDK-compiled code. No C aggregate or compiler
 private complex representation crosses that boundary.
+
+
+## Three-disk live Schottky integration
+
+The live-control test compiles the same parameter-control state machine and
+renderer-packet constructor used by Android:
+
+~~~text
+cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 \
+  -I android/app/src/main/cpp \
+  android/app/src/main/cpp/mobius_math.c \
+  android/app/src/main/cpp/renderer_packet.c \
+  android/app/src/main/cpp/parameter_controls.c \
+  tests/control_packet_test.c -lm \
+  -o /tmp/indras-pearls-control-test
+/tmp/indras-pearls-control-test
+~~~
+
+It requires:
+
+- zero controls to reproduce the historical `r = 0.7` renderer packet;
+- each of the six real control coordinates to change the packet independently;
+- representative values across all three disks (343 combined states) to remain
+  finite and retain four pairwise-disjoint circles;
+- out-of-domain values to fail without altering the previous output packet.
+
+The QEMU acceptance test goes one step further: it installs the exact APK,
+drags disk 1, disk 2, and disk 3 through Android input, and requires each drag
+to change a debug-only offscreen GLES framebuffer crop. This is the acceptance
+receipt for calling the controls integrated with the rendering path.
