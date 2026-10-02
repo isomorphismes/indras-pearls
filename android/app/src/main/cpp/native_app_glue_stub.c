@@ -250,57 +250,6 @@ static void write_frame_probe(struct engine *engine) {
         return;
     }
 
-    GLuint framebuffer = 0;
-    GLuint color_buffer = 0;
-    glGenFramebuffers(1, &framebuffer);
-    glGenRenderbuffers(1, &color_buffer);
-    if (framebuffer == 0 || color_buffer == 0) {
-        LOGE("frame probe could not allocate GLES framebuffer objects");
-        if (color_buffer != 0) {
-            glDeleteRenderbuffers(1, &color_buffer);
-        }
-        if (framebuffer != 0) {
-            glDeleteFramebuffers(1, &framebuffer);
-        }
-        return;
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-    glBindRenderbuffer(GL_RENDERBUFFER, color_buffer);
-    glRenderbufferStorage(
-        GL_RENDERBUFFER,
-        GL_RGBA8,
-        engine->width,
-        engine->height
-    );
-    glFramebufferRenderbuffer(
-        GL_FRAMEBUFFER,
-        GL_COLOR_ATTACHMENT0,
-        GL_RENDERBUFFER,
-        color_buffer
-    );
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        LOGE("frame probe framebuffer is incomplete");
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
-        return;
-    }
-
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    draw_limit_set(
-        &engine->renderer,
-        engine->renderer_packet,
-        &engine->parameter_controls,
-        engine->camera.center_x,
-        engine->camera.center_y,
-        engine->camera.scale,
-        engine->width,
-        engine->height
-    );
-    glFinish();
-
     const int crop_y = engine->height * 10 / 100;
     const int crop_height = engine->height * 65 / 100;
     if (engine->width <= 0 || crop_height <= 0) {
@@ -311,9 +260,6 @@ static void write_frame_probe(struct engine *engine) {
         (size_t)engine->width * (size_t)crop_height;
     if (pixel_count > SIZE_MAX / 4 || pixel_count > SIZE_MAX / 3) {
         LOGE("frame probe dimensions overflow");
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -323,12 +269,15 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe allocation failed for %zu pixels", pixel_count);
         free(rgb);
         free(rgba);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
+    /*
+     * Read the real EGL backbuffer after draw_limit_set and before swap.
+     * This proves the same framebuffer that the application presents, instead
+     * of redrawing into a test-only FBO.
+     */
+    glFinish();
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(
         0,
@@ -339,14 +288,11 @@ static void write_frame_probe(struct engine *engine) {
         GL_UNSIGNED_BYTE,
         rgba
     );
-    GLenum read_error = glGetError();
+    const GLenum read_error = glGetError();
     if (read_error != GL_NO_ERROR) {
         LOGE("frame probe glReadPixels failed: 0x%x", read_error);
         free(rgb);
         free(rgba);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -371,13 +317,13 @@ static void write_frame_probe(struct engine *engine) {
 
     char temporary_path[1024];
     char final_path[1024];
-    int temporary_written = snprintf(
+    const int temporary_written = snprintf(
         temporary_path,
         sizeof(temporary_path),
         "%s/frame-probe.tmp",
         engine->app->activity->internalDataPath
     );
-    int final_written = snprintf(
+    const int final_written = snprintf(
         final_path,
         sizeof(final_path),
         "%s/frame-probe.ppm",
@@ -390,9 +336,6 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe path is too long");
         free(rgb);
         free(rgba);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -401,13 +344,10 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe could not open output file");
         free(rgb);
         free(rgba);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
-    bool write_ok =
+    const bool write_ok =
         fprintf(output, "P6\n%d %d\n255\n", engine->width, crop_height) > 0 &&
         fwrite(rgb, 3, pixel_count, output) == pixel_count &&
         fclose(output) == 0;
@@ -416,9 +356,6 @@ static void write_frame_probe(struct engine *engine) {
         remove(temporary_path);
         free(rgb);
         free(rgba);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -427,9 +364,6 @@ static void write_frame_probe(struct engine *engine) {
         remove(temporary_path);
         free(rgb);
         free(rgba);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteRenderbuffers(1, &color_buffer);
-        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -456,10 +390,6 @@ static void write_frame_probe(struct engine *engine) {
 
     free(rgb);
     free(rgba);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDeleteRenderbuffers(1, &color_buffer);
-    glDeleteFramebuffers(1, &framebuffer);
-    glViewport(0, 0, engine->width, engine->height);
 #else
     (void)engine;
 #endif
