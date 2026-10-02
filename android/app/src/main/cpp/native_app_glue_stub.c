@@ -9,6 +9,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "renderer_packet.h"
@@ -211,6 +213,258 @@ static void terminate_display(struct engine *engine) {
     engine->height = 0;
 }
 
+static bool frame_probe_requested(const struct engine *engine) {
+#ifndef NDEBUG
+    if (engine->app == NULL ||
+        engine->app->activity == NULL ||
+        engine->app->activity->internalDataPath == NULL) {
+        return false;
+    }
+
+    char path[1024];
+    int written = snprintf(
+        path,
+        sizeof(path),
+        "%s/frame-probe.enable",
+        engine->app->activity->internalDataPath
+    );
+    if (written < 0 || (size_t)written >= sizeof(path)) {
+        return false;
+    }
+
+    FILE *marker = fopen(path, "rb");
+    if (marker == NULL) {
+        return false;
+    }
+    fclose(marker);
+    return true;
+#else
+    (void)engine;
+    return false;
+#endif
+}
+
+static void write_frame_probe(struct engine *engine) {
+#ifndef NDEBUG
+    if (!frame_probe_requested(engine)) {
+        return;
+    }
+
+    GLuint framebuffer = 0;
+    GLuint color_buffer = 0;
+    glGenFramebuffers(1, &framebuffer);
+    glGenRenderbuffers(1, &color_buffer);
+    if (framebuffer == 0 || color_buffer == 0) {
+        LOGE("frame probe could not allocate GLES framebuffer objects");
+        if (color_buffer != 0) {
+            glDeleteRenderbuffers(1, &color_buffer);
+        }
+        if (framebuffer != 0) {
+            glDeleteFramebuffers(1, &framebuffer);
+        }
+        return;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, color_buffer);
+    glRenderbufferStorage(
+        GL_RENDERBUFFER,
+        GL_RGBA8,
+        engine->width,
+        engine->height
+    );
+    glFramebufferRenderbuffer(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        GL_RENDERBUFFER,
+        color_buffer
+    );
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        LOGE("frame probe framebuffer is incomplete");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    draw_limit_set(
+        &engine->renderer,
+        engine->renderer_packet,
+        &engine->parameter_controls,
+        engine->camera.center_x,
+        engine->camera.center_y,
+        engine->camera.scale,
+        engine->width,
+        engine->height
+    );
+    glFinish();
+
+    const int crop_y = engine->height * 10 / 100;
+    const int crop_height = engine->height * 65 / 100;
+    if (engine->width <= 0 || crop_height <= 0) {
+        return;
+    }
+
+    const size_t pixel_count =
+        (size_t)engine->width * (size_t)crop_height;
+    if (pixel_count > SIZE_MAX / 4 || pixel_count > SIZE_MAX / 3) {
+        LOGE("frame probe dimensions overflow");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    unsigned char *rgba = malloc(pixel_count * 4);
+    unsigned char *rgb = malloc(pixel_count * 3);
+    if (rgba == NULL || rgb == NULL) {
+        LOGE("frame probe allocation failed for %zu pixels", pixel_count);
+        free(rgb);
+        free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(
+        0,
+        crop_y,
+        engine->width,
+        crop_height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        rgba
+    );
+    GLenum read_error = glGetError();
+    if (read_error != GL_NO_ERROR) {
+        LOGE("frame probe glReadPixels failed: 0x%x", read_error);
+        free(rgb);
+        free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    for (size_t index = 0; index < pixel_count * 4; ++index) {
+        hash ^= rgba[index];
+        hash *= UINT64_C(1099511628211);
+    }
+
+    for (int output_row = 0; output_row < crop_height; ++output_row) {
+        const int source_row = crop_height - 1 - output_row;
+        for (int x = 0; x < engine->width; ++x) {
+            const size_t source =
+                ((size_t)source_row * (size_t)engine->width + (size_t)x) * 4;
+            const size_t target =
+                ((size_t)output_row * (size_t)engine->width + (size_t)x) * 3;
+            rgb[target] = rgba[source];
+            rgb[target + 1] = rgba[source + 1];
+            rgb[target + 2] = rgba[source + 2];
+        }
+    }
+
+    char temporary_path[1024];
+    char final_path[1024];
+    int temporary_written = snprintf(
+        temporary_path,
+        sizeof(temporary_path),
+        "%s/frame-probe.tmp",
+        engine->app->activity->internalDataPath
+    );
+    int final_written = snprintf(
+        final_path,
+        sizeof(final_path),
+        "%s/frame-probe.ppm",
+        engine->app->activity->internalDataPath
+    );
+    if (temporary_written < 0 ||
+        final_written < 0 ||
+        (size_t)temporary_written >= sizeof(temporary_path) ||
+        (size_t)final_written >= sizeof(final_path)) {
+        LOGE("frame probe path is too long");
+        free(rgb);
+        free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    FILE *output = fopen(temporary_path, "wb");
+    if (output == NULL) {
+        LOGE("frame probe could not open output file");
+        free(rgb);
+        free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    bool write_ok =
+        fprintf(output, "P6\n%d %d\n255\n", engine->width, crop_height) > 0 &&
+        fwrite(rgb, 3, pixel_count, output) == pixel_count &&
+        fclose(output) == 0;
+    if (!write_ok) {
+        LOGE("frame probe write failed");
+        remove(temporary_path);
+        free(rgb);
+        free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    if (rename(temporary_path, final_path) != 0) {
+        LOGE("frame probe could not publish output file");
+        remove(temporary_path);
+        free(rgb);
+        free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    float controls_cartesian[SCHOTTKY_PARAMETER_FLOAT_COUNT];
+    complex_parameter_controls_flatten(
+        &engine->parameter_controls,
+        controls_cartesian
+    );
+    LOGI(
+        "QEMU frame probe hash=%016llx "
+        "u0=(%.4f,%.4f) u1=(%.4f,%.4f) u2=(%.4f,%.4f) "
+        "crop=%dx%d+0+%d",
+        (unsigned long long)hash,
+        (double)controls_cartesian[0],
+        (double)controls_cartesian[1],
+        (double)controls_cartesian[2],
+        (double)controls_cartesian[3],
+        (double)controls_cartesian[4],
+        (double)controls_cartesian[5],
+        engine->width,
+        crop_height,
+        crop_y
+    );
+
+    free(rgb);
+    free(rgba);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteRenderbuffers(1, &color_buffer);
+    glDeleteFramebuffers(1, &framebuffer);
+    glViewport(0, 0, engine->width, engine->height);
+#else
+    (void)engine;
+#endif
+}
+
 static void draw_frame(struct engine *engine) {
     if (engine->display == EGL_NO_DISPLAY || engine->surface == EGL_NO_SURFACE) {
         return;
@@ -232,6 +486,8 @@ static void draw_frame(struct engine *engine) {
         engine->width,
         engine->height
     );
+
+    write_frame_probe(engine);
 
     if (!eglSwapBuffers(engine->display, engine->surface)) {
         LOGE("eglSwapBuffers failed: 0x%x", eglGetError());
