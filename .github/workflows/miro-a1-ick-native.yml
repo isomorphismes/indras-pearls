@@ -146,6 +146,8 @@ jobs:
             '-D__diagnose_if__(...)='
             '-D__enable_if__(...)='
             '-D__pass_object_size__(...)='
+            '-D__format__(...)='
+            '-DBIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD=1'
           )
           failed=0
           : > "$out/compile-receipt.tsv"
@@ -163,6 +165,7 @@ jobs:
                 -DINDRAS_FREESTANDING_MATH \
                 -I"$srcdir" -I"$glue" \
                 "$src" -o "$pp" >"$pp_log" 2>&1; then
+              sed -E -i 's/__attribute__\(\([[:space:]]*\)\)//g' "$pp"
               printf '%s\tpreprocess\tPASS\n' "$stem" >> "$out/compile-receipt.tsv"
             else
               printf '%s\tpreprocess\tFAIL\n' "$stem" >> "$out/compile-receipt.tsv"
