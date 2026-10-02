@@ -1,0 +1,146 @@
+name: MIRO A1 Thumb APK
+
+on:
+  push:
+    branches:
+      - miro-a1-thumb-stripped-apk
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: miro-a1-apk-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build-miro-a1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ANDROID_NDK_VERSION: 29.0.14206865
+      BUILD_TOOLS_VERSION: 36.0.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android toolchain
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;$BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build armeabi-v7a Thumb APK
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon :android:app:assembleDebug
+
+      - name: Strip native ELF, align, and sign
+        run: |
+          set -euxo pipefail
+
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          llvm_bin="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          build_tools="$sdk_root/build-tools/$BUILD_TOOLS_VERSION"
+          raw="$GITHUB_WORKSPACE/android/app/build/outputs/apk/debug/app-debug.apk"
+          work="$RUNNER_TEMP/miro-a1-apk"
+          unpack="$work/unpack"
+          unsigned="$work/miro-a1-unsigned.apk"
+          aligned="$work/miro-a1-aligned.apk"
+          final="$GITHUB_WORKSPACE/schottky-miro-a1-armeabi-v7a-thumb-stripped.apk"
+
+          rm -rf "$work"
+          mkdir -p "$unpack"
+          unzip -q "$raw" -d "$unpack"
+
+          test -f "$unpack/lib/armeabi-v7a/libindras_pearls.so"
+          test "$(find "$unpack/lib" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -u)" = "armeabi-v7a"
+
+          so="$unpack/lib/armeabi-v7a/libindras_pearls.so"
+          "$llvm_bin/llvm-strip" --strip-all "$so"
+
+          "$llvm_bin/llvm-readelf" -h "$so" | tee "$GITHUB_WORKSPACE/miro-a1-elf-header.txt"
+          grep -q 'Class:.*ELF32' "$GITHUB_WORKSPACE/miro-a1-elf-header.txt"
+          grep -q 'Machine:.*ARM' "$GITHUB_WORKSPACE/miro-a1-elf-header.txt"
+
+          "$llvm_bin/llvm-readelf" -A "$so" | tee "$GITHUB_WORKSPACE/miro-a1-arm-attributes.txt"
+          grep -q 'Tag_THUMB_ISA_use' "$GITHUB_WORKSPACE/miro-a1-arm-attributes.txt"
+
+          "$llvm_bin/llvm-readelf" -SW "$so" | tee "$GITHUB_WORKSPACE/miro-a1-sections.txt"
+          if grep -Eq '\.debug_[[:alnum:]_]+|[[:space:]]\.symtab[[:space:]]|[[:space:]]\.strtab[[:space:]]' "$GITHUB_WORKSPACE/miro-a1-sections.txt"; then
+            echo "unstripped debug or static symbol sections remain" >&2
+            exit 1
+          fi
+
+          thumb_symbol="$("$llvm_bin/llvm-readelf" -Ws "$so" | awk '$8 == "ANativeActivity_onCreate" { print $2; exit }')"
+          test -n "$thumb_symbol"
+          python3 - "$thumb_symbol" <<'PY'
+import sys
+value = int(sys.argv[1], 16)
+if value & 1 != 1:
+    raise SystemExit(f"ANativeActivity_onCreate is not marked Thumb: 0x{value:x}")
+print(f"Thumb function marker verified: 0x{value:x}")
+PY
+
+          rm -rf "$unpack/META-INF"
+          (
+            cd "$unpack"
+            zip -q -X -r -0 "$unsigned" .
+          )
+
+          "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
+
+          keystore="$HOME/.android/debug.keystore"
+          if [ ! -f "$keystore" ]; then
+            mkdir -p "$(dirname "$keystore")"
+            keytool -genkeypair -v \
+              -keystore "$keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
+
+          "$build_tools/apksigner" sign \
+            --ks "$keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$final" \
+            "$aligned"
+
+          "$build_tools/zipalign" -c -p 4 "$final"
+          "$build_tools/apksigner" verify --verbose --print-certs "$final"
+
+          test "$(unzip -Z1 "$final" | awk -F/ '/^lib\// {print $2}' | sort -u)" = "armeabi-v7a"
+
+          sha256sum "$final" | tee "$GITHUB_WORKSPACE/miro-a1-sha256.txt"
+          stat -c '%n %s bytes' "$final" | tee "$GITHUB_WORKSPACE/miro-a1-size.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: schottky-miro-a1-thumb-stripped
+          path: |
+            schottky-miro-a1-armeabi-v7a-thumb-stripped.apk
+            miro-a1-elf-header.txt
+            miro-a1-arm-attributes.txt
+            miro-a1-sections.txt
+            miro-a1-sha256.txt
+            miro-a1-size.txt
+          if-no-files-found: error
