@@ -40,7 +40,7 @@ static const char *fragment_shader_source =
     "uniform float u_parameter_radius;\n"
     "uniform int u_active_parameter;\n"
     "\n"
-    "out vec4 fragment_color;\n"
+    "layout(location = 0) out vec4 fragment_color;\n"
     "\n"
     "vec2 complex_multiply(vec2 left, vec2 right) {\n"
     "    return vec2(\n"
@@ -262,6 +262,12 @@ bool initialize_limit_set_renderer(struct limit_set_renderer *renderer) {
     }
 
     renderer->program = program;
+    const GLint fragment_location = glGetFragDataLocation(program, "fragment_color");
+    if (fragment_location != 0) {
+        LOGE("fragment_color linked at unexpected location %d", fragment_location);
+        terminate_limit_set_renderer(renderer);
+        return false;
+    }
     if (!find_uniforms(renderer)) {
         LOGE("required limit-set shader uniform was optimized out or not found");
         terminate_limit_set_renderer(renderer);
