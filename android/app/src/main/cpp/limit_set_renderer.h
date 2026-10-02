@@ -4,7 +4,7 @@
 #include <GLES3/gl3.h>
 #include <stdbool.h>
 
-#include "group_state.h"
+#include "renderer_packet.h"
 #include "parameter_controls.h"
 
 struct limit_set_renderer {
@@ -29,7 +29,7 @@ bool initialize_limit_set_renderer(struct limit_set_renderer *renderer);
 void terminate_limit_set_renderer(struct limit_set_renderer *renderer);
 void draw_limit_set(
     const struct limit_set_renderer *renderer,
-    const struct limit_set_group *group,
+    const float renderer_packet[static RENDERER_PACKET_FLOAT_COUNT],
     const struct complex_parameter_controls *controls,
     float center_x,
     float center_y,

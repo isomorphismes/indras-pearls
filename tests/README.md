@@ -3,7 +3,7 @@
 Run from the repository root with a C17 compiler and the system math library:
 
 ```text
-cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
+cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
 /tmp/indras-pearls-mobius-math-test
 ```
 
@@ -33,7 +33,19 @@ The executable prints the number of assertions it ran. Its cases cover:
 | Fixed points | Projective fixed-point equation, bundled closed forms, and local multipliers |
 | Circle presentation | `|cz+d|=1`, boundary-to-paired-boundary mapping, interior-to-exterior mapping, four-circle pairing, positive disjointness margin, and disjoint/tangent/overlap classification |
 | Family boundary and reconstruction | Strict `0<r<1/√2` interior status, tangent boundary, overlap rejection, exact `r=0.7` renderer coefficients, and continuity away from the boundary |
+| Renderer packet | Flattening of the validated four-circle presentation into the scalar/array GLES boundary, four independent radius-squared slots, rejection outside the classical domain, and output preservation on failure |
 
 The family constructor reports a positive parameter that cannot be represented
 with a determinant-one binary64 matrix as `FAMILY_NUMERICALLY_UNREPRESENTABLE`;
 that numerical limit is separate from the mathematical open domain.
+
+## ICK C / Android NDK boundary
+
+CI also builds the pinned ICK C compiler for ARMv7, compiles `mobius_math.c`
+and `renderer_packet.c` as freestanding `armeabi-v7a` objects, and lets
+Android NDK r29 Clang/lld perform the final shared-library link with
+`tests/renderer_packet_ndk_probe.c`.
+
+Only an ordinary `float` radius, integer status, and flat float array cross
+between ICK-compiled code and NDK-compiled code. No C aggregate or compiler
+private complex representation crosses that boundary.

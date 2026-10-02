@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "group_state.h"
+#include "renderer_packet.h"
 #include "limit_set_renderer.h"
 #include "parameter_controls.h"
 
@@ -34,7 +34,7 @@ struct engine {
     int32_t height;
 
     struct camera camera;
-    struct limit_set_group group;
+    float renderer_packet[RENDERER_PACKET_FLOAT_COUNT];
     struct complex_parameter_controls parameter_controls;
     struct limit_set_renderer renderer;
 
@@ -180,7 +180,7 @@ static void draw_frame(struct engine *engine) {
 
     draw_limit_set(
         &engine->renderer,
-        &engine->group,
+        engine->renderer_packet,
         &engine->parameter_controls,
         engine->camera.center_x,
         engine->camera.center_y,
@@ -351,7 +351,12 @@ void android_main(struct android_app *app) {
     engine.camera.center_x = 0.0f;
     engine.camera.center_y = 0.0f;
     engine.camera.scale = 4.0f;
-    initialize_bundled_limit_set_group(&engine.group);
+    const int packet_status =
+        symmetric_classical_renderer_packet(0.7f, engine.renderer_packet);
+    if (packet_status != RENDERER_PACKET_OK) {
+        LOGE("could not construct bundled Schottky renderer packet: %d", packet_status);
+        return;
+    }
     initialize_complex_parameter_controls(&engine.parameter_controls);
     engine.dirty = true;
 

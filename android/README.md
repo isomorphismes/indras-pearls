@@ -1,22 +1,51 @@
 # Android native limit-set slice
 
-This native path now has two deliberately separate layers: the existing playable limit-set renderer, and an experimental three-disk complex-parameter control surface.
+The Android path now has three deliberate layers:
 
-The bundled mathematical state is still the independently specified classical rank-2 Schottky group from the first slice. Four disjoint isometric circles and four determinant-one Möbius maps live in plain C state. The fragment shader repeatedly moves a screen-space complex point out of the circle that contains it; bounded escape depth gives the visible limit-set approximation.
+1. the binary64 Schottky/Möbius mathematics core in plain C;
+2. a flat scalar renderer packet derived from a validated classical circle presentation;
+3. the NativeActivity/EGL/GLES renderer and touch UI.
 
-The three new controls are ordinary unit disks. Each disk stores one complex value directly as its horizontal and vertical handle position. Values are clamped to radius `0.94`, so the interaction stays strictly inside the unit disk rather than pretending the rim is an ordinary finite value.
+For the bundled view, the app constructs the symmetric classical family member
+at `r = 0.7`, derives its four isometric circles and four exit maps through
+`mobius_math.c`, and flattens that validated state through
+`renderer_packet.c`. The old hand-entered `group_state.c` copy is no longer
+the renderer's source of truth.
 
-This experiment does **not** yet map those three complex values into the Schottky group. That separation is intentional: first test whether three compact two-dimensional controls are usable on the phone, then choose the mathematical chart. Android input dispatch may edit camera state or the independent control state, but it still does not contain or mutate the group construction.
+The packet carries separate center and radius-squared values for all four
+circles plus the four complex coefficients of every exit map. The fragment
+shader therefore no longer assumes that all four circles share one radius.
 
-The renderer is an independent native implementation. `philogb.md` and `notes/webgpu.md` remain reference notes about Nico Belmonte's public deployment; they do not assert a license for his application code, and this slice does not structurally port the browser bundle.
+The packet boundary is intentionally friendly to both ICK C and the Android
+NDK. Its externally visible construction call uses an ordinary `float`
+parameter, integer status, and a flat float array. C aggregates and compiler
+private complex representations stay on the producer side. CI proves an
+`armeabi-v7a` path in which ICK C compiles the Möbius and packet translation
+units and Android NDK r29 Clang/lld performs the final Android shared-library
+link.
+
+The three disk controls remain an independent UI experiment. Each disk stores
+one complex value directly as its horizontal and vertical handle position,
+clamped to radius `0.94`. They do **not** yet map into the Schottky group.
+That keeps the parameter-chart decision separate from the now-working
+mathematics-to-renderer path.
+
+The renderer remains an independent native implementation. `philogb.md` and
+`notes/webgpu.md` are reference notes about Nico Belmonte's public
+deployment; they do not assert a license for his application code.
 
 ## Build
 
-Use JDK 17, Android SDK 36, NDK `29.0.14206865`, CMake 3.22.1, and Gradle 8.13.
+Use JDK 17, Android SDK 36, NDK `29.0.14206865`, CMake 3.22.1, and Gradle
+8.13.
 
 ```sh
 gradle :android:app:assembleDebug
 ```
+
+The ordinary APK build may compile the C producer with NDK Clang. The separate
+CI boundary job recompiles the same producer sources with ICK C and proves that
+those objects link through the NDK Android boundary.
 
 The APK is written under `android/app/build/outputs/apk/debug/`.
 
@@ -27,21 +56,19 @@ The APK is written under `android/app/build/outputs/apk/debug/`.
 - two fingers outside the disks: zoom;
 - lift: leave both camera and parameter values where they are.
 
-A parameter drag captures that gesture so it does not accidentally pan or pinch the limit-set view.
-
-## Control layout experiment
-
-The three disks sit across the top of the framebuffer at one-sixth, one-half, and five-sixths of the width. Each has a faint real/imaginary crosshair, a colored rim, and a draggable handle. The layout is computed from the framebuffer dimensions rather than Android view widgets, so it stays inside the same NativeActivity/GLES boundary as the renderer.
-
-The three stored values are currently UI state only. No claim is made that they are already a coordinate chart on Schottky space.
+A parameter drag captures that gesture so it does not accidentally pan or
+pinch the limit-set view.
 
 ## Current renderer boundary
 
-- one full-screen triangle; no CPU-side point cloud or mesh for the fractal;
+- one full-screen triangle; no CPU-side fractal point cloud or mesh;
 - GLES 3 fragment shader with 32-bit complex arithmetic;
-- one bundled group uploaded as uniforms;
+- validated binary64 group construction before narrowing to renderer floats;
+- four independent circle centers and radius-squared values uploaded as uniforms;
+- four exit maps uploaded as ordinary complex coefficient arrays;
 - bounded 24-step circle classification / Möbius iteration;
 - three analytic disk controls drawn in the same fragment pass;
-- event-driven redraws when the camera, controls, or window change.
+- event-driven redraws when camera, controls, or window state changes.
 
-The next mathematical step, after the control layout is physically tested, is to decide how the three disk values map into a normalized three-complex-parameter description of the rank-2 Schottky group.
+The next parameter step is to let a chosen control mode request a new validated
+group and packet rather than editing renderer coefficients directly.
