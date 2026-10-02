@@ -15,7 +15,7 @@ jobs:
 
       - name: Build and run deterministic host mathematics tests
         run: |
-          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
+          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
           /tmp/indras-pearls-mobius-math-test
 
   android:
@@ -47,3 +47,92 @@ jobs:
         with:
           name: indras-pearls-touch-stub
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+
+  ick-armv7-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      ANDROID_NDK_VERSION: 29.0.14206865
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out pinned ICK C compiler source
+        uses: actions/checkout@v4
+        with:
+          repository: dilapidated-shed/ick
+          ref: ea034a574097e81d1027660b39c3e1c185d11b80
+          path: _ick
+          submodules: true
+
+      - name: Build ARMv7 ICK C compiler
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential flex bison texinfo \
+            libgmp-dev libmpfr-dev libmpc-dev libisl-dev libzstd-dev \
+            binutils-arm-linux-gnueabi
+          (
+            cd _ick
+            . ick/SOURCE.lock
+            test "$(git -C gcc rev-parse HEAD)" = "$gcc_commit"
+            sh ick/materialize.sh gcc source
+            mkdir build stage
+            cd build
+            ../source/configure \
+              --target=arm-linux-gnueabi \
+              --prefix="$GITHUB_WORKSPACE/_ick/stage" \
+              --with-as="$(command -v arm-linux-gnueabi-as)" \
+              --with-ld="$(command -v arm-linux-gnueabi-ld)" \
+              --enable-languages=c \
+              --disable-bootstrap \
+              --disable-multilib \
+              --disable-nls \
+              --disable-shared \
+              --disable-threads \
+              --without-headers \
+              --disable-libatomic \
+              --disable-libgomp \
+              --disable-libquadmath \
+              --disable-libssp \
+              --disable-libvtv
+            make -j2 all-gcc
+            make install-gcc
+          )
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install pinned NDK
+        run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
+
+      - name: Compile Schottky math with ICK and link with NDK
+        run: |
+          set -euxo pipefail
+          ick="$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc"
+          flags=(-march=armv7-a -mthumb -mfpu=neon -mfloat-abi=softfp)
+          include=(-I android/app/src/main/cpp)
+          "$ick" "${flags[@]}" -std=c11 -O2 -fPIC -ffreestanding \
+            -DINDRAS_FREESTANDING_MATH "${include[@]}" \
+            -c android/app/src/main/cpp/mobius_math.c -o /tmp/mobius_math.ick.o
+          "$ick" "${flags[@]}" -std=c11 -O2 -fPIC -ffreestanding \
+            -DINDRAS_FREESTANDING_MATH "${include[@]}" \
+            -c android/app/src/main/cpp/renderer_packet.c -o /tmp/renderer_packet.ick.o
+
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          llvm_bin="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          ndk_cc="$llvm_bin/armv7a-linux-androideabi21-clang"
+          "$ndk_cc" -std=c11 -O2 -fPIC "${include[@]}" \
+            -c tests/renderer_packet_ndk_probe.c -o /tmp/renderer_packet_ndk_probe.o
+          "$ndk_cc" -shared -Wl,-z,defs -Wl,-z,text -Wl,--fatal-warnings \
+            /tmp/mobius_math.ick.o /tmp/renderer_packet.ick.o \
+            /tmp/renderer_packet_ndk_probe.o -lm \
+            -o /tmp/libindras-ick-packet.so
+
+          "$llvm_bin/llvm-readelf" -h /tmp/libindras-ick-packet.so | tee /tmp/ick-packet.elf
+          grep -q 'Class:.*ELF32' /tmp/ick-packet.elf
+          grep -q 'Machine:.*ARM' /tmp/ick-packet.elf
+          "$llvm_bin/llvm-nm" -D --defined-only /tmp/libindras-ick-packet.so \
+            | grep -q 'indras_ick_renderer_packet_probe'
