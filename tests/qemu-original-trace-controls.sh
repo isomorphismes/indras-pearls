@@ -193,9 +193,29 @@ adb shell input touchscreen swipe \
 check_after_drag "trace-b" \
     'original dgulotta/kleinian raster ready: .*tr\(b\)=\(2\.39[0-9]*,0\.00[0-9]*\)'
 
+# tr(a) imaginary coordinate.
+launch_baseline "trace-a-im"
+center_x=$((width / 4))
+adb logcat -c
+adb shell input touchscreen swipe \
+    "$center_x" "$control_y" \
+    "$center_x" "$((control_y + control_radius / 2))" 500
+check_after_drag "trace-a-im" \
+    'original dgulotta/kleinian raster ready: tr\(a\)=\(2\.200000,-0\.19[0-9]*\)'
+
+# tr(b) imaginary coordinate.
+launch_baseline "trace-b-im"
+center_x=$((3 * width / 4))
+adb logcat -c
+adb shell input touchscreen swipe \
+    "$center_x" "$control_y" \
+    "$center_x" "$((control_y + control_radius / 2))" 500
+check_after_drag "trace-b-im" \
+    'original dgulotta/kleinian raster ready: .*tr\(b\)=\(2\.200000,-0\.19[0-9]*\)'
+
 {
     printf 'state\tPASS\n'
     printf 'controls_tested\t2\n'
-    printf 'semantic_coordinates_tested\ttr(a),tr(b) real axes\n'
+    printf 'semantic_coordinates_tested\ttr(a).re,tr(a).im,tr(b).re,tr(b).im\n'
     printf 'screen_crop\t%sx%s+0+%s\n' "$width" "$crop_height" "$crop_y"
 } > "$out/status.tsv"
