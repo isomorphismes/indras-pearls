@@ -69,10 +69,13 @@ capture_picture() {
         "$out/$phase-$label.png"
     test -s "$out/$phase-$label.png"
 
-    maximum="$(convert "$out/$phase-$label.png" -format '%[fx:maxima]' info:)"
-    test "$maximum" != "0"
+    rgb_maximum="$(convert "$out/$phase-$label.png" -alpha off -format '%[fx:maxima]' info:)"
+    rgb_mean="$(convert "$out/$phase-$label.png" -alpha off -format '%[fx:mean]' info:)"
+    awk -v value="$rgb_maximum" 'BEGIN { exit !(value > 0.08) }'
+    awk -v value="$rgb_mean" 'BEGIN { exit !(value > 0.003) }'
 
-    sha256sum "$out/$phase-$label.png" | awk '{print $1}'
+    convert "$out/$phase-$label.png" -alpha off RGB:- \
+        | sha256sum | awk '{print $1}'
 }
 
 launch_baseline() {
@@ -90,6 +93,13 @@ launch_baseline() {
 
     before_hash="$(capture_picture "$label" before)"
     printf '%s' "$before_hash" > "$out/before-$label.hash"
+
+    before_packet="$(
+        sed -n 's/^.*Schottky renderer packet fnv1a32=\([0-9a-fA-F][0-9a-fA-F]*\).*$/\1/p' \
+            "$out/before-$label.log" | tail -n 1
+    )"
+    test -n "$before_packet"
+    printf '%s' "$before_packet" > "$out/before-$label.packet"
 }
 
 check_after_drag() {
@@ -104,8 +114,16 @@ check_after_drag() {
     after_hash="$(capture_picture "$label" after)"
     test "$before_hash" != "$after_hash"
 
+    before_packet="$(cat "$out/before-$label.packet")"
+    after_packet="$(
+        sed -n 's/^.*Schottky renderer packet fnv1a32=\([0-9a-fA-F][0-9a-fA-F]*\).*$/\1/p' \
+            "$out/after-$label.log" | tail -n 1
+    )"
+    test -n "$after_packet"
+    test "$before_packet" != "$after_packet"
+
     compare_status=0
-    if changed_pixels="$(compare -metric AE -fuzz 2% \
+    if changed_pixels="$(compare -metric AE -fuzz 2% -channel RGB \
         "$out/before-$label.png" "$out/after-$label.png" null: 2>&1)"; then
         compare_status=0
     else
@@ -123,7 +141,7 @@ check_after_drag() {
     test "$changed_pixels" -gt "$minimum_changed"
 
     rmse_status=0
-    if rmse_metric="$(compare -metric RMSE \
+    if rmse_metric="$(compare -metric RMSE -channel RGB \
         "$out/before-$label.png" "$out/after-$label.png" null: 2>&1)"; then
         rmse_status=0
     else
@@ -140,14 +158,14 @@ check_after_drag() {
     # Require at least 0.1% of full channel scale RMS across the whole crop.
     awk -v value="$normalized_rmse" 'BEGIN { exit !(value > 0.001) }'
 
-    echo "$label before=$before_hash after=$after_hash changed_pixels=$changed_pixels minimum=$minimum_changed normalized_rmse=$normalized_rmse"
+    echo "$label before=$before_hash after=$after_hash before_packet=$before_packet after_packet=$after_packet changed_pixels=$changed_pixels minimum=$minimum_changed normalized_rmse=$normalized_rmse"
 
-    printf '%s\t%s\t%s\t%s\t%s\n' \
-        "$label" "$before_hash" "$after_hash" "$changed_pixels" "$normalized_rmse" \
-        >> "$out/results.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$label" "$before_hash" "$after_hash" "$before_packet" "$after_packet" \
+        "$changed_pixels" "$normalized_rmse" >> "$out/results.tsv"
 }
 
-printf 'control\tbefore_hash\tafter_hash\tchanged_pixels\tnormalized_rmse\n' > "$out/results.tsv"
+printf 'control\tbefore_rgb_hash\tafter_rgb_hash\tbefore_packet\tafter_packet\tchanged_pixels\tnormalized_rmse\n' > "$out/results.tsv"
 
 # Disk 0: move the A-circle pair.
 launch_baseline "u0"
