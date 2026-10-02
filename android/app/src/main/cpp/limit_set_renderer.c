@@ -30,8 +30,9 @@ static const char *fragment_shader_source =
     "uniform vec2 u_center;\n"
     "uniform float u_scale;\n"
     "uniform vec2 u_resolution;\n"
-    "uniform vec2 u_circle_center[REGION_COUNT];\n"
-    "uniform float u_circle_radius_squared[REGION_COUNT];\n"
+    "uniform vec4 u_circle_center_x;\n"
+    "uniform vec4 u_circle_center_y;\n"
+    "uniform vec4 u_circle_radius_squared;\n"
     "uniform vec2 u_a[REGION_COUNT];\n"
     "uniform vec2 u_b[REGION_COUNT];\n"
     "uniform vec2 u_c[REGION_COUNT];\n"
@@ -69,24 +70,10 @@ static const char *fragment_shader_source =
     "}\n"
     "\n"
     "int containing_region(vec2 z) {\n"
-    "    vec4 center_x = vec4(\n"
-    "        u_circle_center[0].x, u_circle_center[1].x,\n"
-    "        u_circle_center[2].x, u_circle_center[3].x\n"
-    "    );\n"
-    "    vec4 center_y = vec4(\n"
-    "        u_circle_center[0].y, u_circle_center[1].y,\n"
-    "        u_circle_center[2].y, u_circle_center[3].y\n"
-    "    );\n"
-    "    vec4 dx = vec4(z.x) - center_x;\n"
-    "    vec4 dy = vec4(z.y) - center_y;\n"
+    "    vec4 dx = vec4(z.x) - u_circle_center_x;\n"
+    "    vec4 dy = vec4(z.y) - u_circle_center_y;\n"
     "    vec4 distance_squared = dx * dx + dy * dy;\n"
-    "    vec4 radius_squared = vec4(\n"
-    "        u_circle_radius_squared[0],\n"
-    "        u_circle_radius_squared[1],\n"
-    "        u_circle_radius_squared[2],\n"
-    "        u_circle_radius_squared[3]\n"
-    "    );\n"
-    "    vec4 inside = vec4(1.0) - step(radius_squared, distance_squared);\n"
+    "    vec4 inside = vec4(1.0) - step(u_circle_radius_squared, distance_squared);\n"
     "    float any_region = dot(inside, vec4(1.0));\n"
     "    float selected_region = dot(inside, vec4(0.0, 1.0, 2.0, 3.0));\n"
     "    return int(selected_region + any_region) - 1;\n"
@@ -150,7 +137,8 @@ static const char *fragment_shader_source =
     "    vec2 pixel_from_center = gl_FragCoord.xy - 0.5 * u_resolution;\n"
     "    vec2 z = u_center + pixel_from_center * (u_scale / u_resolution.y);\n"
     "    int first_region = u_initial_region;\n"
-    "    vec2 first_offset = z - u_circle_center[first_region];\n"
+    "    vec2 first_center = vec2(u_circle_center_x[first_region], u_circle_center_y[first_region]);\n"
+    "    vec2 first_offset = z - first_center;\n"
     "    if (dot(first_offset, first_offset) >= u_circle_radius_squared[first_region]) {\n"
     "        discard;\n"
     "    }\n"
@@ -209,8 +197,9 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
     renderer->center_location = glGetUniformLocation(renderer->program, "u_center");
     renderer->scale_location = glGetUniformLocation(renderer->program, "u_scale");
     renderer->resolution_location = glGetUniformLocation(renderer->program, "u_resolution");
-    renderer->circle_center_location = glGetUniformLocation(renderer->program, "u_circle_center[0]");
-    renderer->circle_radius_squared_location = glGetUniformLocation(renderer->program, "u_circle_radius_squared[0]");
+    renderer->circle_center_x_location = glGetUniformLocation(renderer->program, "u_circle_center_x");
+    renderer->circle_center_y_location = glGetUniformLocation(renderer->program, "u_circle_center_y");
+    renderer->circle_radius_squared_location = glGetUniformLocation(renderer->program, "u_circle_radius_squared");
     renderer->a_location = glGetUniformLocation(renderer->program, "u_a[0]");
     renderer->b_location = glGetUniformLocation(renderer->program, "u_b[0]");
     renderer->c_location = glGetUniformLocation(renderer->program, "u_c[0]");
@@ -224,7 +213,8 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
     return renderer->center_location >= 0 &&
         renderer->scale_location >= 0 &&
         renderer->resolution_location >= 0 &&
-        renderer->circle_center_location >= 0 &&
+        renderer->circle_center_x_location >= 0 &&
+        renderer->circle_center_y_location >= 0 &&
         renderer->circle_radius_squared_location >= 0 &&
         renderer->a_location >= 0 &&
         renderer->b_location >= 0 &&
@@ -395,14 +385,25 @@ void draw_limit_set(
     glUniform2f(renderer->center_location, center_x, center_y);
     glUniform1f(renderer->scale_location, scale);
     glUniform2f(renderer->resolution_location, (float)width, (float)height);
-    glUniform2fv(
-        renderer->circle_center_location,
-        LIMIT_SET_REGION_COUNT,
-        renderer_packet + RENDERER_PACKET_CIRCLE_CENTER_OFFSET
+    const float *circle_centers =
+        renderer_packet + RENDERER_PACKET_CIRCLE_CENTER_OFFSET;
+    glUniform4f(
+        renderer->circle_center_x_location,
+        circle_centers[0],
+        circle_centers[2],
+        circle_centers[4],
+        circle_centers[6]
     );
-    glUniform1fv(
+    glUniform4f(
+        renderer->circle_center_y_location,
+        circle_centers[1],
+        circle_centers[3],
+        circle_centers[5],
+        circle_centers[7]
+    );
+    glUniform4fv(
         renderer->circle_radius_squared_location,
-        LIMIT_SET_REGION_COUNT,
+        1,
         renderer_packet + RENDERER_PACKET_CIRCLE_RADIUS_SQUARED_OFFSET
     );
     glUniform2fv(
