@@ -8,11 +8,24 @@ add_library(native_app_glue STATIC
 )
 target_include_directories(native_app_glue PUBLIC "${NATIVE_GLUE_DIR}")
 
-# The restored dgulotta/kleinian path is currently built with the Android NDK.
-# ICK qualification for this aggregate-heavy literal port is tracked separately;
-# do not substitute the previous Schottky shader/math path as a fallback.
+if(ICK_ARMV7_OBJECTS)
+    if(NOT ANDROID_ABI STREQUAL "armeabi-v7a")
+        message(FATAL_ERROR "ICK_ARMV7_OBJECTS requires ANDROID_ABI=armeabi-v7a")
+    endif()
+    if(NOT EXISTS "${ICK_ORIGINAL_KLEINIAN_OBJECT}")
+        message(FATAL_ERROR "ICK original Kleinian object not found: ${ICK_ORIGINAL_KLEINIAN_OBJECT}")
+    endif()
+    set(ORIGINAL_KLEINIAN_SOURCE "${ICK_ORIGINAL_KLEINIAN_OBJECT}")
+    set_source_files_properties(
+        "${ICK_ORIGINAL_KLEINIAN_OBJECT}"
+        PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE
+    )
+else()
+    set(ORIGINAL_KLEINIAN_SOURCE original_kleinian.c)
+endif()
+
 add_library(indras_pearls SHARED
-    original_kleinian.c
+    ${ORIGINAL_KLEINIAN_SOURCE}
     original_texture_renderer.c
     native_app_glue_stub.c
 )
