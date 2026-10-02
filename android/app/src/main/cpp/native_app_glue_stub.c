@@ -1,4 +1,3 @@
-#include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android_native_app_glue.h>
@@ -6,30 +5,19 @@
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include "renderer_packet.h"
-#include "limit_set_renderer.h"
-#include "parameter_controls.h"
+#include "original_kleinian.h"
+#include "original_texture_renderer.h"
 
 #define LOG_TAG "IndrasPearls"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-#ifdef INDRAS_ICK_PRODUCER
-#define SCHOTTKY_PRODUCER_NAME "ICK C"
-#else
-#define SCHOTTKY_PRODUCER_NAME "Android NDK C"
-#endif
-
-struct camera {
-    float center_x;
-    float center_y;
-    float scale;
-};
+#define ORIGINAL_POINT_REQUEST 10000u
 
 struct engine {
     struct android_app *app;
@@ -38,34 +26,100 @@ struct engine {
     EGLContext context;
     int32_t width;
     int32_t height;
-
-    struct camera camera;
-    float renderer_packet[RENDERER_PACKET_FLOAT_COUNT];
-    struct complex_parameter_controls parameter_controls;
-    struct limit_set_renderer renderer;
-
-    bool dragging;
-    bool pinching;
-    float last_x;
-    float last_y;
-    float last_span;
+    struct original_texture_renderer renderer;
     bool dirty;
 };
 
 static void terminate_display(struct engine *engine);
 
-static float pointer_span(const AInputEvent *event) {
-    if (AMotionEvent_getPointerCount(event) < 2) {
-        return 0.0f;
+static bool rebuild_original_raster(struct engine *engine) {
+    if (engine->width <= 0 || engine->height <= 0) {
+        return false;
     }
 
-    float x0 = AMotionEvent_getX(event, 0);
-    float y0 = AMotionEvent_getY(event, 0);
-    float x1 = AMotionEvent_getX(event, 1);
-    float y1 = AMotionEvent_getY(event, 1);
-    float dx = x1 - x0;
-    float dy = y1 - y0;
-    return sqrtf(dx * dx + dy * dy);
+    const size_t point_capacity =
+        original_kleinian_point_capacity(ORIGINAL_POINT_REQUEST);
+    if (point_capacity == 0) {
+        return false;
+    }
+
+    struct original_kleinian_queue_item *queue =
+        calloc(point_capacity, sizeof(*queue));
+    struct original_kleinian_complex *points =
+        calloc(point_capacity, sizeof(*points));
+
+    const size_t width = (size_t)engine->width;
+    const size_t height = (size_t)engine->height;
+    if (width > SIZE_MAX / height) {
+        free(points);
+        free(queue);
+        return false;
+    }
+    const size_t pixel_count = width * height;
+    if (pixel_count > SIZE_MAX / 4u) {
+        free(points);
+        free(queue);
+        return false;
+    }
+    const size_t rgba_size = pixel_count * 4u;
+    uint8_t *rgba = malloc(rgba_size);
+
+    if (queue == NULL || points == NULL || rgba == NULL) {
+        LOGE("could not allocate original Kleinian working buffers");
+        free(rgba);
+        free(points);
+        free(queue);
+        return false;
+    }
+
+    const struct original_kleinian_complex ta = {2.2, 0.0};
+    const struct original_kleinian_complex tb = {2.2, 0.0};
+    size_t point_count = 0;
+
+    bool ok = original_kleinian_generate_points_from_traces(
+        ta,
+        tb,
+        ORIGINAL_POINT_REQUEST,
+        queue,
+        point_capacity,
+        points,
+        point_capacity,
+        &point_count
+    );
+    if (ok) {
+        ok = original_kleinian_rasterize_rgba(
+            points,
+            point_count,
+            width,
+            height,
+            rgba,
+            rgba_size
+        );
+    }
+    if (ok) {
+        ok = upload_original_texture(
+            &engine->renderer,
+            engine->width,
+            engine->height,
+            rgba
+        );
+    }
+
+    if (ok) {
+        LOGI(
+            "original dgulotta/kleinian raster ready: tr(a)=2.2 tr(b)=2.2 points=%zu size=%dx%d",
+            point_count,
+            engine->width,
+            engine->height
+        );
+    } else {
+        LOGE("could not build original dgulotta/kleinian raster");
+    }
+
+    free(rgba);
+    free(points);
+    free(queue);
+    return ok;
 }
 
 static bool initialize_display(struct engine *engine) {
@@ -135,15 +189,20 @@ static bool initialize_display(struct engine *engine) {
     eglQuerySurface(display, surface, EGL_WIDTH, &engine->width);
     eglQuerySurface(display, surface, EGL_HEIGHT, &engine->height);
 
-    if (!initialize_limit_set_renderer(&engine->renderer)) {
-        LOGE("could not initialize full-screen limit-set renderer");
+    if (!initialize_original_texture_renderer(&engine->renderer)) {
+        LOGE("could not initialize original-raster texture renderer");
+        terminate_display(engine);
+        return false;
+    }
+
+    if (!rebuild_original_raster(engine)) {
         terminate_display(engine);
         return false;
     }
 
     engine->dirty = true;
     LOGI(
-        "GLES limit-set renderer ready: %s / %s",
+        "GLES original-raster renderer ready: %s / %s",
         (const char *)glGetString(GL_VERSION),
         (const char *)glGetString(GL_RENDERER)
     );
@@ -155,7 +214,7 @@ static void terminate_display(struct engine *engine) {
         return;
     }
 
-    terminate_limit_set_renderer(&engine->renderer);
+    terminate_original_texture_renderer(&engine->renderer);
 
     eglMakeCurrent(engine->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     if (engine->context != EGL_NO_CONTEXT) {
@@ -173,153 +232,100 @@ static void terminate_display(struct engine *engine) {
     engine->height = 0;
 }
 
+static void probe_original_frame(struct engine *engine) {
+#ifndef NDEBUG
+    if (engine->width <= 0 || engine->height <= 0) {
+        return;
+    }
+
+    const size_t width = (size_t)engine->width;
+    const size_t height = (size_t)engine->height;
+    if (width > SIZE_MAX / height) {
+        LOGE("original GPU probe dimensions overflow");
+        return;
+    }
+    const size_t pixel_count = width * height;
+    if (pixel_count == 0 || pixel_count > SIZE_MAX / 4u) {
+        LOGE("original GPU probe pixel count overflow");
+        return;
+    }
+
+    uint8_t *rgba = malloc(pixel_count * 4u);
+    if (rgba == NULL) {
+        LOGE("original GPU probe allocation failed");
+        return;
+    }
+
+    glFinish();
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(
+        0, 0, engine->width, engine->height,
+        GL_RGBA, GL_UNSIGNED_BYTE, rgba
+    );
+    const GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        LOGE("original GPU probe glReadPixels failed: 0x%x", error);
+        free(rgba);
+        return;
+    }
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    size_t dark_pixels = 0;
+    size_t bright_pixels = 0;
+    for (size_t pixel = 0; pixel < pixel_count; ++pixel) {
+        const size_t offset = pixel * 4u;
+        const unsigned r = rgba[offset];
+        const unsigned g = rgba[offset + 1u];
+        const unsigned b = rgba[offset + 2u];
+        hash ^= r; hash *= UINT64_C(1099511628211);
+        hash ^= g; hash *= UINT64_C(1099511628211);
+        hash ^= b; hash *= UINT64_C(1099511628211);
+        if (r < 32u && g < 32u && b < 32u) {
+            ++dark_pixels;
+        }
+        if (r > 223u && g > 223u && b > 223u) {
+            ++bright_pixels;
+        }
+    }
+
+    LOGI(
+        "original GPU frame probe rgbhash=%016llx dark=%zu bright=%zu pixels=%zu",
+        (unsigned long long)hash,
+        dark_pixels,
+        bright_pixels,
+        pixel_count
+    );
+    free(rgba);
+#else
+    (void)engine;
+#endif
+}
+
 static void draw_frame(struct engine *engine) {
     if (engine->display == EGL_NO_DISPLAY || engine->surface == EGL_NO_SURFACE) {
         return;
     }
 
+    int32_t old_width = engine->width;
+    int32_t old_height = engine->height;
     eglQuerySurface(engine->display, engine->surface, EGL_WIDTH, &engine->width);
     eglQuerySurface(engine->display, engine->surface, EGL_HEIGHT, &engine->height);
     if (engine->width <= 0 || engine->height <= 0) {
         return;
     }
 
-    draw_limit_set(
-        &engine->renderer,
-        engine->renderer_packet,
-        &engine->parameter_controls,
-        engine->camera.center_x,
-        engine->camera.center_y,
-        engine->camera.scale,
-        engine->width,
-        engine->height
-    );
+    if ((engine->width != old_width || engine->height != old_height) &&
+        !rebuild_original_raster(engine)) {
+        return;
+    }
+
+    draw_original_texture(&engine->renderer);
+    probe_original_frame(engine);
 
     if (!eglSwapBuffers(engine->display, engine->surface)) {
         LOGE("eglSwapBuffers failed: 0x%x", eglGetError());
     }
     engine->dirty = false;
-}
-
-static int32_t handle_input(struct android_app *app, AInputEvent *event) {
-    struct engine *engine = app->userData;
-    if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) {
-        return 0;
-    }
-
-    int32_t action = AMotionEvent_getAction(event);
-    int32_t masked_action = action & AMOTION_EVENT_ACTION_MASK;
-    size_t pointer_count = AMotionEvent_getPointerCount(event);
-
-    switch (masked_action) {
-        case AMOTION_EVENT_ACTION_DOWN: {
-            float x = AMotionEvent_getX(event, 0);
-            float y = AMotionEvent_getY(event, 0);
-            if (begin_complex_parameter_drag(
-                    &engine->parameter_controls,
-                    x,
-                    y,
-                    engine->width,
-                    engine->height
-                )) {
-                engine->dragging = false;
-                engine->pinching = false;
-                engine->dirty = true;
-                return 1;
-            }
-
-            engine->dragging = pointer_count == 1;
-            engine->pinching = false;
-            engine->last_x = x;
-            engine->last_y = y;
-            return 1;
-        }
-
-        case AMOTION_EVENT_ACTION_POINTER_DOWN:
-            if (engine->parameter_controls.active_index >= 0) {
-                return 1;
-            }
-            if (pointer_count >= 2) {
-                engine->dragging = false;
-                engine->pinching = true;
-                engine->last_span = pointer_span(event);
-            }
-            return 1;
-
-        case AMOTION_EVENT_ACTION_MOVE:
-            if (engine->parameter_controls.active_index >= 0) {
-                if (pointer_count >= 1 && update_complex_parameter_drag(
-                        &engine->parameter_controls,
-                        AMotionEvent_getX(event, 0),
-                        AMotionEvent_getY(event, 0),
-                        engine->width,
-                        engine->height
-                    )) {
-                    engine->dirty = true;
-                }
-                return 1;
-            }
-
-            if (pointer_count >= 2) {
-                float span = pointer_span(event);
-                if (!engine->pinching) {
-                    engine->pinching = true;
-                    engine->dragging = false;
-                    engine->last_span = span;
-                    return 1;
-                }
-
-                if (engine->last_span > 1.0f && span > 1.0f) {
-                    float ratio = span / engine->last_span;
-                    engine->camera.scale /= ratio;
-                    if (engine->camera.scale < 0.0001f) engine->camera.scale = 0.0001f;
-                    if (engine->camera.scale > 10000.0f) engine->camera.scale = 10000.0f;
-                    engine->dirty = true;
-                }
-                engine->last_span = span;
-                return 1;
-            }
-
-            if (engine->dragging && pointer_count == 1) {
-                float x = AMotionEvent_getX(event, 0);
-                float y = AMotionEvent_getY(event, 0);
-                float dx = x - engine->last_x;
-                float dy = y - engine->last_y;
-                engine->last_x = x;
-                engine->last_y = y;
-
-                float height = engine->height > 0 ? (float)engine->height : 1.0f;
-                float complex_units_per_pixel = engine->camera.scale / height;
-                engine->camera.center_x -= dx * complex_units_per_pixel;
-                engine->camera.center_y += dy * complex_units_per_pixel;
-                engine->dirty = true;
-                return 1;
-            }
-            break;
-
-        case AMOTION_EVENT_ACTION_POINTER_UP:
-            if (engine->parameter_controls.active_index >= 0) {
-                end_complex_parameter_drag(&engine->parameter_controls);
-                engine->dirty = true;
-                return 1;
-            }
-            engine->pinching = false;
-            engine->dragging = false;
-            return 1;
-
-        case AMOTION_EVENT_ACTION_UP:
-        case AMOTION_EVENT_ACTION_CANCEL:
-            end_complex_parameter_drag(&engine->parameter_controls);
-            engine->dragging = false;
-            engine->pinching = false;
-            engine->dirty = true;
-            return 1;
-
-        default:
-            break;
-    }
-
-    return 0;
 }
 
 static void handle_command(struct android_app *app, int32_t command) {
@@ -354,22 +360,11 @@ void android_main(struct android_app *app) {
     engine.display = EGL_NO_DISPLAY;
     engine.surface = EGL_NO_SURFACE;
     engine.context = EGL_NO_CONTEXT;
-    engine.camera.center_x = 0.0f;
-    engine.camera.center_y = 0.0f;
-    engine.camera.scale = 4.0f;
-    const int packet_status =
-        symmetric_classical_renderer_packet(0.7f, engine.renderer_packet);
-    if (packet_status != RENDERER_PACKET_OK) {
-        LOGE("could not construct bundled Schottky renderer packet: %d", packet_status);
-        return;
-    }
-    LOGI("Schottky math producer: %s", SCHOTTKY_PRODUCER_NAME);
-    initialize_complex_parameter_controls(&engine.parameter_controls);
     engine.dirty = true;
 
     app->userData = &engine;
     app->onAppCmd = handle_command;
-    app->onInputEvent = handle_input;
+    app->onInputEvent = NULL;
 
     while (true) {
         int events = 0;

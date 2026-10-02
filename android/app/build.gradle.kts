@@ -14,15 +14,11 @@ val useIckArmv7 = providers.gradleProperty("ickArmv7")
     .map { it.toBoolean() }
     .orElse(false)
     .get()
-val ickMobiusObject = providers.gradleProperty("ickMobiusObject").orNull
-val ickRendererPacketObject = providers.gradleProperty("ickRendererPacketObject").orNull
+val ickOriginalKleinianObject = providers.gradleProperty("ickOriginalKleinianObject").orNull
 
 if (useIckArmv7) {
-    require(!ickMobiusObject.isNullOrBlank()) {
-        "-PickMobiusObject=/absolute/path/to/mobius_math.o is required with -PickArmv7=true"
-    }
-    require(!ickRendererPacketObject.isNullOrBlank()) {
-        "-PickRendererPacketObject=/absolute/path/to/renderer_packet.o is required with -PickArmv7=true"
+    require(!ickOriginalKleinianObject.isNullOrBlank()) {
+        "-PickOriginalKleinianObject=/absolute/path/to/original_kleinian.o is required with -PickArmv7=true"
     }
 }
 
@@ -64,8 +60,7 @@ android {
                 if (useIckArmv7) {
                     arguments += listOf(
                         "-DICK_ARMV7_OBJECTS=ON",
-                        "-DICK_MOBIUS_OBJECT=${file(ickMobiusObject!!).absolutePath}",
-                        "-DICK_RENDERER_PACKET_OBJECT=${file(ickRendererPacketObject!!).absolutePath}"
+                        "-DICK_ORIGINAL_KLEINIAN_OBJECT=${file(ickOriginalKleinianObject!!).absolutePath}"
                     )
                 }
             }

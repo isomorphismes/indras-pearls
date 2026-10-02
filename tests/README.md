@@ -49,3 +49,21 @@ Android NDK r29 Clang/lld perform the final shared-library link with
 Only an ordinary `float` radius, integer status, and flat float array cross
 between ICK-compiled code and NDK-compiled code. No C aggregate or compiler
 private complex representation crosses that boundary.
+
+
+## Restored original Kleinian reference path
+
+`tests/original_kleinian_test.c` checks the C translation of the pinned
+`isomorphismes/kleinian-groups@117dc5f34353e98cfae2f12bf386db5862110d92`
+implementation. It covers the original `generators()` trace parameterization,
+the `CircleQueue` 4,6,8,... growth rule, finite/default point-set bounds, and
+the web raster contract at `tr(a)=tr(b)=2.2`.
+
+CI compiles and executes this test with the Android NDK's Clang in host mode.
+For ARMv7 production, the same `original_kleinian.c` source is compiled by
+the pinned ICK C compiler as a freestanding Thumb/softfp object; NDK then links
+that object with the Android NativeActivity/EGL/GLES wrapper.
+
+`tests/original_kleinian_ndk_probe.c` is the narrow ICK-to-NDK ABI/link probe.
+It must not be replaced by the older renderer-packet probe when the production
+APK is using the restored original algorithm.
