@@ -86,8 +86,56 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: indras-pearls-touch-stub
+          name: indras-pearls-restored-candidate
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+
+  qemu-original-raster:
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Download exact restored APK from this workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: indras-pearls-restored-candidate
+          path: qemu-apk
+
+      - name: Install image comparison utility
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Enable KVM access when available
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+              | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+          fi
+
+      - name: Prove original Kleinian raster reaches GPU and display
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash tests/qemu-original-raster.sh qemu-apk/app-debug.apk qemu-original
+
+      - name: Retain restored-raster evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: indras-pearls-qemu-original-${{ github.run_id }}
+          path: qemu-original/
+          if-no-files-found: error
 
 
   ick-armv7-boundary:
