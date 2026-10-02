@@ -263,22 +263,128 @@ static void write_frame_probe(struct engine *engine) {
         return;
     }
 
+    GLuint framebuffer = 0;
+    GLuint color_buffer = 0;
+    glGenFramebuffers(1, &framebuffer);
+    glGenRenderbuffers(1, &color_buffer);
+    if (framebuffer == 0 || color_buffer == 0) {
+        LOGE("frame probe could not allocate framebuffer objects");
+        if (color_buffer != 0) {
+            glDeleteRenderbuffers(1, &color_buffer);
+        }
+        if (framebuffer != 0) {
+            glDeleteFramebuffers(1, &framebuffer);
+        }
+        return;
+    }
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, color_buffer);
+    glRenderbufferStorage(
+        GL_RENDERBUFFER,
+        GL_RGBA8,
+        engine->width,
+        engine->height
+    );
+    glFramebufferRenderbuffer(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        GL_RENDERBUFFER,
+        color_buffer
+    );
+
+    const GLenum color_attachment = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &color_attachment);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) !=
+        GL_FRAMEBUFFER_COMPLETE) {
+        LOGE("frame probe framebuffer is incomplete");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    /*
+     * First prove that this emulator/context can write and read this FBO.
+     * A failure here is a probe failure, not evidence about Schottky.
+     */
+    glViewport(0, 0, engine->width, engine->height);
+    glClearColor(0.25f, 0.50f, 0.75f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glFinish();
+
+    unsigned char calibration[4] = {0, 0, 0, 0};
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(
+        engine->width / 2,
+        engine->height / 2,
+        1,
+        1,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        calibration
+    );
+    GLenum read_error = glGetError();
+    if (read_error != GL_NO_ERROR ||
+        calibration[0] < 50 || calibration[0] > 80 ||
+        calibration[1] < 110 || calibration[1] > 145 ||
+        calibration[2] < 175 || calibration[2] > 210 ||
+        calibration[3] < 240) {
+        LOGE(
+            "frame probe calibration failed error=0x%x rgba=%u,%u,%u,%u",
+            read_error,
+            calibration[0],
+            calibration[1],
+            calibration[2],
+            calibration[3]
+        );
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
+        return;
+    }
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    draw_limit_set(
+        &engine->renderer,
+        engine->renderer_packet,
+        &engine->parameter_controls,
+        engine->camera.center_x,
+        engine->camera.center_y,
+        engine->camera.scale,
+        engine->width,
+        engine->height
+    );
+    glFinish();
+
+    const GLenum draw_error = glGetError();
+    if (draw_error != GL_NO_ERROR) {
+        LOGE("frame probe Schottky draw failed: 0x%x", draw_error);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
+        return;
+    }
+
     unsigned char *rgba = malloc(pixel_count * 4);
     unsigned char *rgb = malloc(pixel_count * 3);
     if (rgba == NULL || rgb == NULL) {
         LOGE("frame probe allocation failed for %zu pixels", pixel_count);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
         return;
     }
 
-    /*
-     * Read the real EGL backbuffer after draw_limit_set and before swap.
-     * This proves the same framebuffer that the application presents, instead
-     * of redrawing into a test-only FBO.
-     */
-    glFinish();
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(
         0,
         crop_y,
@@ -288,18 +394,26 @@ static void write_frame_probe(struct engine *engine) {
         GL_UNSIGNED_BYTE,
         rgba
     );
-    const GLenum read_error = glGetError();
+    read_error = glGetError();
     if (read_error != GL_NO_ERROR) {
         LOGE("frame probe glReadPixels failed: 0x%x", read_error);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
         return;
     }
 
     uint64_t hash = UINT64_C(1469598103934665603);
+    unsigned int maximum_channel = 0;
     for (size_t index = 0; index < pixel_count * 4; ++index) {
         hash ^= rgba[index];
         hash *= UINT64_C(1099511628211);
+        if ((index & 3U) != 3U && rgba[index] > maximum_channel) {
+            maximum_channel = rgba[index];
+        }
     }
 
     for (int output_row = 0; output_row < crop_height; ++output_row) {
@@ -336,6 +450,10 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe path is too long");
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
         return;
     }
 
@@ -344,6 +462,10 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe could not open output file");
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
         return;
     }
 
@@ -356,6 +478,10 @@ static void write_frame_probe(struct engine *engine) {
         remove(temporary_path);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
         return;
     }
 
@@ -364,6 +490,10 @@ static void write_frame_probe(struct engine *engine) {
         remove(temporary_path);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        glViewport(0, 0, engine->width, engine->height);
         return;
     }
 
@@ -373,10 +503,11 @@ static void write_frame_probe(struct engine *engine) {
         controls_cartesian
     );
     LOGI(
-        "QEMU frame probe hash=%016llx "
+        "QEMU frame probe hash=%016llx max=%u "
         "u0=(%.4f,%.4f) u1=(%.4f,%.4f) u2=(%.4f,%.4f) "
         "crop=%dx%d+0+%d",
         (unsigned long long)hash,
+        maximum_channel,
         (double)controls_cartesian[0],
         (double)controls_cartesian[1],
         (double)controls_cartesian[2],
@@ -390,6 +521,10 @@ static void write_frame_probe(struct engine *engine) {
 
     free(rgb);
     free(rgba);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteRenderbuffers(1, &color_buffer);
+    glDeleteFramebuffers(1, &framebuffer);
+    glViewport(0, 0, engine->width, engine->height);
 #else
     (void)engine;
 #endif
