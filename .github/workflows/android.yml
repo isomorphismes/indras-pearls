@@ -14,13 +14,30 @@ concurrency:
 jobs:
   host-mathematics:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_NDK_VERSION: 29.0.14206865
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and run deterministic host mathematics tests
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android NDK test toolchain
+        run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
+
+      - name: Build and run deterministic mathematics tests with NDK Clang
         run: |
-          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
+          set -euxo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          ndk_cc="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          host=(--target=x86_64-linux-gnu --gcc-toolchain=/usr)
+
+          "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2             -I android/app/src/main/cpp             android/app/src/main/cpp/mobius_math.c             android/app/src/main/cpp/renderer_packet.c             tests/mobius_math_test.c -lm             -o /tmp/indras-pearls-mobius-math-test
           /tmp/indras-pearls-mobius-math-test
+
+          "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2             -I android/app/src/main/cpp             android/app/src/main/cpp/original_kleinian.c             tests/original_kleinian_test.c -lm             -o /tmp/indras-pearls-original-kleinian-test
+          /tmp/indras-pearls-original-kleinian-test
 
   android:
     runs-on: ubuntu-latest
@@ -227,11 +244,9 @@ jobs:
           name: indras-pearls-ick-armv7-${{ github.sha }}
           path: |
             build/indras-pearls-ick-armeabi-v7a-debug.apk
-            build/ick/armeabi-v7a/mobius_math.o
-            build/ick/armeabi-v7a/renderer_packet.o
-            build/ick/armeabi-v7a/mobius_math.attributes
-            build/ick/armeabi-v7a/renderer_packet.attributes
-            build/ick/armeabi-v7a/ick-packet.elf
+            build/ick/armeabi-v7a/original_kleinian.o
+            build/ick/armeabi-v7a/original_kleinian.attributes
+            build/ick/armeabi-v7a/ick-original.elf
             build/ick/armeabi-v7a/packaged.elf
             build/ick/armeabi-v7a/packaged.exports
             build/ick-apk-files.txt
