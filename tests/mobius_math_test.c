@@ -228,10 +228,6 @@ static void test_isometric_circles_and_validation(void) {
                        projective_tolerance), "sampled boundary satisfies |cz+d|=1");
         }
 
-        const struct complex_number interior = complex_add(circle.center, complex_make(circle.radius * 0.5, 0.0));
-        struct projective_point image;
-        CHECK(mobius_apply_projective(presentation.exit_map[index], projective_finite(interior), &image),
-              "map an interior point projectively");
         const size_t paired_index = index ^ 1U;
         struct projective_point boundary_image;
         CHECK(mobius_apply_projective(presentation.exit_map[index], projective_finite(boundary),
@@ -241,9 +237,30 @@ static void test_isometric_circles_and_validation(void) {
                                          boundary_image.numerator), 1.0,
                    projective_tolerance),
               "boundary maps to paired inverse boundary");
-        CHECK(!projective_point_is_infinity(image) &&
-              circle_equation_value(presentation.exit_map[paired_index], image.numerator) > 1.0,
-              "paired map sends source-circle interior outside inverse circle");
+
+        for (size_t radial_index = 1; radial_index <= 3; ++radial_index) {
+            const double radial_fraction = (double)radial_index / 4.0;
+            for (size_t sample_index = 0; sample_index < 8; ++sample_index) {
+                const double angle = (acos(-1.0) * 2.0 * (double)sample_index) / 8.0;
+                const struct complex_number interior = complex_add(
+                    circle.center,
+                    complex_make(
+                        circle.radius * radial_fraction * cos(angle),
+                        circle.radius * radial_fraction * sin(angle)
+                    )
+                );
+                struct projective_point image;
+                CHECK(mobius_apply_projective(
+                          presentation.exit_map[index],
+                          projective_finite(interior),
+                          &image) &&
+                      !projective_point_is_infinity(image) &&
+                      circle_equation_value(
+                          presentation.exit_map[paired_index],
+                          image.numerator) > 1.0,
+                      "source-circle interior samples map outside paired inverse circle");
+            }
+        }
     }
     CHECK(presentation.minimum_pair_gap > 0.0, "all circle interiors have a positive gap");
     for (size_t index = 0; index < INDRAS_CIRCLE_PAIR_COUNT; ++index) {
