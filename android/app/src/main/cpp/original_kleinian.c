@@ -7,8 +7,10 @@
 #define sqrt __builtin_sqrt
 #define copysign __builtin_copysign
 #define isfinite __builtin_isfinite
+#define ORIGINAL_KLEINIAN_NAN (__builtin_nan(""))
 #else
 #include <math.h>
+#define ORIGINAL_KLEINIAN_NAN NAN
 #endif
 
 
@@ -66,7 +68,7 @@ static bool c_finite(C x) {
 static C c_div(C numerator, C denominator) {
     const double scale = fmax(fabs(denominator.re), fabs(denominator.im));
     if (scale == 0.0 || !isfinite(scale)) {
-        return c_make(0.0 / 0.0, 0.0 / 0.0);
+        return c_make(ORIGINAL_KLEINIAN_NAN, ORIGINAL_KLEINIAN_NAN);
     }
     const double dr = denominator.re / scale;
     const double di = denominator.im / scale;
@@ -324,6 +326,9 @@ bool original_kleinian_generators(
 size_t original_kleinian_point_capacity(size_t num_points) {
     if (num_points <= 4) {
         return 4;
+    }
+    if ((num_points & 1u) != 0u && num_points == SIZE_MAX) {
+        return 0;
     }
     return (num_points & 1u) == 0u ? num_points : num_points + 1u;
 }
