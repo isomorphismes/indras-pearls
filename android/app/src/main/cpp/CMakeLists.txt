@@ -1,6 +1,27 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(indras_pearls_native C)
 
+option(INDRAS_MIRO_A1 "Build the MIRO A1 armeabi-v7a Thumb variant" OFF)
+
+if(INDRAS_MIRO_A1)
+    if(NOT ANDROID_ABI STREQUAL "armeabi-v7a")
+        message(FATAL_ERROR "MIRO A1 build requires armeabi-v7a")
+    endif()
+
+    add_compile_options(
+        -march=armv7-a
+        -mthumb
+        -mfpu=neon
+        -mfloat-abi=softfp
+        -O2
+        -ffunction-sections
+        -fdata-sections
+    )
+    add_link_options(
+        -Wl,--gc-sections
+    )
+endif()
+
 set(NATIVE_GLUE_DIR "${CMAKE_ANDROID_NDK}/sources/android/native_app_glue")
 
 add_library(native_app_glue STATIC
