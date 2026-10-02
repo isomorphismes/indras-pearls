@@ -324,6 +324,13 @@ void draw_limit_set(
     copy_parameter_controls(parameter_centers, parameter_values, controls, width, height);
 
     glViewport(0, 0, width, height);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_RASTERIZER_DISCARD);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(renderer->program);
     glBindVertexArray(renderer->vertex_array);
 
