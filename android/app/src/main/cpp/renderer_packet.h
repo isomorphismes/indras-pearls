@@ -32,7 +32,7 @@ enum renderer_packet_status {
  */
 int symmetric_classical_renderer_packet(
     float radius,
-    float output[static RENDERER_PACKET_FLOAT_COUNT]
+    float output[RENDERER_PACKET_FLOAT_COUNT]
 );
 
 #endif
