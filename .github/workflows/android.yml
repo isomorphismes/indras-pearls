@@ -33,7 +33,7 @@ jobs:
           cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
           /tmp/indras-pearls-mobius-math-test
 
-          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c android/app/src/main/cpp/parameter_controls.c tests/control_packet_test.c -lm -o /tmp/indras-pearls-control-test
+          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c android/app/src/main/cpp/parameter_controls.c tests/control_packet_integration_test.c -lm -o /tmp/indras-pearls-control-test
           /tmp/indras-pearls-control-test
 
   android:
