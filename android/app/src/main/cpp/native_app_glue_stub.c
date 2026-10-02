@@ -350,6 +350,13 @@ static void draw_frame(struct engine *engine) {
         return;
     }
 
+#ifndef NDEBUG
+    if (frame_probe_requested(engine)) {
+        glClearColor(0.25f, 0.50f, 0.75f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+#endif
+
     draw_limit_set(
         &engine->renderer,
         engine->renderer_packet,
