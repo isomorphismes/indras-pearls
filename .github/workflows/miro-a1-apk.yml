@@ -23,10 +23,23 @@ jobs:
     env:
       ANDROID_NDK_VERSION: 29.0.14206865
       BUILD_TOOLS_VERSION: 36.0.0
+      INDRAS_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      INDRAS_TEST_KEYSTORE_PASSWORD: wegert-debug
+      INDRAS_TEST_KEY_ALIAS: wegert-debug
+      INDRAS_TEST_KEY_PASSWORD: wegert-debug
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Check out stable public test signer
+        uses: actions/checkout@v4
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
 
       - uses: actions/setup-java@v4
         with:
@@ -101,23 +114,14 @@ jobs:
 
           "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
 
-          keystore="$HOME/.android/debug.keystore"
-          if [ ! -f "$keystore" ]; then
-            mkdir -p "$(dirname "$keystore")"
-            keytool -genkeypair -v \
-              -keystore "$keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
-          fi
+          test -f "$INDRAS_TEST_KEYSTORE"
 
           "$build_tools/apksigner" sign \
-            --ks "$keystore" \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android \
-            --key-pass pass:android \
+            --ks "$INDRAS_TEST_KEYSTORE" \
+            --ks-type PKCS12 \
+            --ks-key-alias "$INDRAS_TEST_KEY_ALIAS" \
+            --ks-pass "pass:$INDRAS_TEST_KEYSTORE_PASSWORD" \
+            --key-pass "pass:$INDRAS_TEST_KEY_PASSWORD" \
             --out "$final" \
             "$aligned"
 
@@ -128,6 +132,12 @@ jobs:
 
           sha256sum "$final" | tee "$GITHUB_WORKSPACE/miro-a1-sha256.txt"
           stat -c '%n %s bytes' "$final" | tee "$GITHUB_WORKSPACE/miro-a1-size.txt"
+
+      - name: Verify finished MIRO APK signer
+        uses: isomorphisms/ai-ci/android-signing@fbac8ed36c1aa9c14024c92b724fb334ffbbcef3
+        with:
+          apk: schottky-miro-a1-armeabi-v7a-thumb-stripped.apk
+          lane: test
 
       - uses: actions/upload-artifact@v4
         with:
