@@ -89,13 +89,9 @@ jobs:
 
           thumb_symbol="$("$llvm_bin/llvm-readelf" -Ws "$so" | awk '$8 == "ANativeActivity_onCreate" { print $2; exit }')"
           test -n "$thumb_symbol"
-          python3 - "$thumb_symbol" <<'PY'
-import sys
-value = int(sys.argv[1], 16)
-if value & 1 != 1:
-    raise SystemExit(f"ANativeActivity_onCreate is not marked Thumb: 0x{value:x}")
-print(f"Thumb function marker verified: 0x{value:x}")
-PY
+          thumb_value=$((16#$thumb_symbol))
+          test $((thumb_value & 1)) -eq 1
+          printf 'Thumb function marker verified: 0x%x\n' "$thumb_value"
 
           rm -rf "$unpack/META-INF"
           (
