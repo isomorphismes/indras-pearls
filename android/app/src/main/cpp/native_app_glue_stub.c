@@ -19,6 +19,12 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
+#ifdef INDRAS_ICK_PRODUCER
+#define SCHOTTKY_PRODUCER_NAME "ICK C"
+#else
+#define SCHOTTKY_PRODUCER_NAME "Android NDK C"
+#endif
+
 struct camera {
     float center_x;
     float center_y;
@@ -47,6 +53,44 @@ struct engine {
 };
 
 static void terminate_display(struct engine *engine);
+
+static bool refresh_schottky_renderer_packet(struct engine *engine) {
+    float controls_cartesian[SCHOTTKY_PARAMETER_FLOAT_COUNT];
+    complex_parameter_controls_flatten(
+        &engine->parameter_controls,
+        controls_cartesian
+    );
+
+    const int status = schottky_three_disk_renderer_packet(
+        controls_cartesian,
+        engine->renderer_packet
+    );
+    if (status != RENDERER_PACKET_OK) {
+        LOGE(
+            "Schottky controls rejected status=%d "
+            "u0=(%.4f,%.4f) u1=(%.4f,%.4f) u2=(%.4f,%.4f)",
+            status,
+            (double)controls_cartesian[0],
+            (double)controls_cartesian[1],
+            (double)controls_cartesian[2],
+            (double)controls_cartesian[3],
+            (double)controls_cartesian[4],
+            (double)controls_cartesian[5]
+        );
+        return false;
+    }
+
+    LOGI(
+        "Schottky controls u0=(%.4f,%.4f) u1=(%.4f,%.4f) u2=(%.4f,%.4f)",
+        (double)controls_cartesian[0],
+        (double)controls_cartesian[1],
+        (double)controls_cartesian[2],
+        (double)controls_cartesian[3],
+        (double)controls_cartesian[4],
+        (double)controls_cartesian[5]
+    );
+    return true;
+}
 
 static float pointer_span(const AInputEvent *event) {
     if (AMotionEvent_getPointerCount(event) < 2) {
@@ -189,6 +233,7 @@ static void draw_frame(struct engine *engine) {
         engine->height
     );
 
+
     if (!eglSwapBuffers(engine->display, engine->surface)) {
         LOGE("eglSwapBuffers failed: 0x%x", eglGetError());
     }
@@ -218,7 +263,9 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
                 )) {
                 engine->dragging = false;
                 engine->pinching = false;
-                engine->dirty = true;
+                if (refresh_schottky_renderer_packet(engine)) {
+                    engine->dirty = true;
+                }
                 return 1;
             }
 
@@ -249,7 +296,9 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
                         engine->width,
                         engine->height
                     )) {
-                    engine->dirty = true;
+                    if (refresh_schottky_renderer_packet(engine)) {
+                        engine->dirty = true;
+                    }
                 }
                 return 1;
             }
@@ -302,6 +351,23 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             return 1;
 
         case AMOTION_EVENT_ACTION_UP:
+            if (engine->parameter_controls.active_index >= 0 &&
+                pointer_count >= 1 &&
+                update_complex_parameter_drag(
+                    &engine->parameter_controls,
+                    AMotionEvent_getX(event, 0),
+                    AMotionEvent_getY(event, 0),
+                    engine->width,
+                    engine->height
+                )) {
+                refresh_schottky_renderer_packet(engine);
+            }
+            end_complex_parameter_drag(&engine->parameter_controls);
+            engine->dragging = false;
+            engine->pinching = false;
+            engine->dirty = true;
+            return 1;
+
         case AMOTION_EVENT_ACTION_CANCEL:
             end_complex_parameter_drag(&engine->parameter_controls);
             engine->dragging = false;
@@ -351,13 +417,11 @@ void android_main(struct android_app *app) {
     engine.camera.center_x = 0.0f;
     engine.camera.center_y = 0.0f;
     engine.camera.scale = 4.0f;
-    const int packet_status =
-        symmetric_classical_renderer_packet(0.7f, engine.renderer_packet);
-    if (packet_status != RENDERER_PACKET_OK) {
-        LOGE("could not construct bundled Schottky renderer packet: %d", packet_status);
+    initialize_complex_parameter_controls(&engine.parameter_controls);
+    if (!refresh_schottky_renderer_packet(&engine)) {
         return;
     }
-    initialize_complex_parameter_controls(&engine.parameter_controls);
+    LOGI("Schottky math producer: %s", SCHOTTKY_PRODUCER_NAME);
     engine.dirty = true;
 
     app->userData = &engine;
