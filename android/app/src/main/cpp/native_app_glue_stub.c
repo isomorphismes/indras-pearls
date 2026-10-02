@@ -9,6 +9,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "renderer_packet.h"
@@ -109,6 +111,113 @@ static bool refresh_schottky_renderer_packet(struct engine *engine) {
         renderer_packet_checksum(engine->renderer_packet)
     );
     return true;
+}
+
+static bool frame_probe_requested(const struct engine *engine) {
+#ifndef NDEBUG
+    if (engine->app == NULL ||
+        engine->app->activity == NULL ||
+        engine->app->activity->internalDataPath == NULL) {
+        return false;
+    }
+
+    char path[1024];
+    int written = snprintf(
+        path,
+        sizeof(path),
+        "%s/frame-probe.enable",
+        engine->app->activity->internalDataPath
+    );
+    if (written < 0 || (size_t)written >= sizeof(path)) {
+        return false;
+    }
+
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        return false;
+    }
+    fclose(file);
+    return true;
+#else
+    (void)engine;
+    return false;
+#endif
+}
+
+static void probe_visible_frame(struct engine *engine) {
+#ifndef NDEBUG
+    if (!frame_probe_requested(engine) ||
+        engine->width <= 0 || engine->height <= 0) {
+        return;
+    }
+
+    const int crop_y = engine->height / 5;
+    const int crop_height = engine->height * 3 / 5;
+    const size_t pixel_count =
+        (size_t)engine->width * (size_t)crop_height;
+    if (pixel_count == 0 || pixel_count > SIZE_MAX / 4) {
+        LOGE("GPU frame probe dimensions overflow");
+        return;
+    }
+
+    unsigned char *rgba = malloc(pixel_count * 4);
+    if (rgba == NULL) {
+        LOGE("GPU frame probe allocation failed");
+        return;
+    }
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(
+        0,
+        crop_y,
+        engine->width,
+        crop_height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        rgba
+    );
+    const GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        LOGE("GPU frame probe glReadPixels failed: 0x%x", error);
+        free(rgba);
+        return;
+    }
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    size_t nonblack = 0;
+    unsigned maximum = 0;
+    for (size_t pixel = 0; pixel < pixel_count; ++pixel) {
+        bool pixel_nonblack = false;
+        for (int channel = 0; channel < 3; ++channel) {
+            const unsigned value = rgba[pixel * 4 + (size_t)channel];
+            hash ^= value;
+            hash *= UINT64_C(1099511628211);
+            if (value != 0) {
+                pixel_nonblack = true;
+            }
+            if (value > maximum) {
+                maximum = value;
+            }
+        }
+        if (pixel_nonblack) {
+            ++nonblack;
+        }
+    }
+
+    LOGI(
+        "GPU frame probe packet=%08x rgbhash=%016llx nonblack=%zu max=%u crop=%dx%d+0+%d",
+        renderer_packet_checksum(engine->renderer_packet),
+        (unsigned long long)hash,
+        nonblack,
+        maximum,
+        engine->width,
+        crop_height,
+        crop_y
+    );
+    free(rgba);
+#else
+    (void)engine;
+#endif
 }
 
 static float pointer_span(const AInputEvent *event) {
@@ -252,6 +361,7 @@ static void draw_frame(struct engine *engine) {
         engine->height
     );
 
+    probe_visible_frame(engine);
 
     if (!eglSwapBuffers(engine->display, engine->surface)) {
         LOGE("eglSwapBuffers failed: 0x%x", eglGetError());
