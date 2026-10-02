@@ -3,9 +3,12 @@
 
 #include <stdbool.h>
 
-#include "group_state.h"
-
 #define COMPLEX_PARAMETER_COUNT 3
+
+struct complex_value {
+    float real;
+    float imaginary;
+};
 
 struct complex_parameter_controls {
     struct complex_value value[COMPLEX_PARAMETER_COUNT];
