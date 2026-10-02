@@ -6,6 +6,7 @@
 
 #define LOG_TAG "IndrasPearls"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 static const char *vertex_shader_source =
     "#version 300 es\n"
@@ -323,6 +324,7 @@ void draw_limit_set(
 
     copy_parameter_controls(parameter_centers, parameter_values, controls, width, height);
 
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width, height);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
@@ -383,6 +385,39 @@ void draw_limit_set(
     );
     glUniform1i(renderer->active_parameter_location, controls->active_index);
 
+#ifndef NDEBUG
+    static bool logged_draw_state = false;
+    if (!logged_draw_state) {
+        GLint current_program = 0;
+        GLint current_vao = 0;
+        GLint framebuffer = -1;
+        GLint viewport[4] = {0, 0, 0, 0};
+        glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &current_vao);
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
+        glGetIntegerv(GL_VIEWPORT, viewport);
+        LOGI(
+            "draw state program=%d expected=%u vao=%d expected_vao=%u "
+            "fbo=%d viewport=%d,%d,%d,%d discard=%d",
+            current_program,
+            renderer->program,
+            current_vao,
+            renderer->vertex_array,
+            framebuffer,
+            viewport[0],
+            viewport[1],
+            viewport[2],
+            viewport[3],
+            glIsEnabled(GL_RASTERIZER_DISCARD) ? 1 : 0
+        );
+        logged_draw_state = true;
+    }
+#endif
+
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    const GLenum draw_error = glGetError();
+    if (draw_error != GL_NO_ERROR) {
+        LOGE("glDrawArrays failed: 0x%x", draw_error);
+    }
     glBindVertexArray(0);
 }
