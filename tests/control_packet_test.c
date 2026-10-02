@@ -203,6 +203,17 @@ static void test_every_real_coordinate_is_live(void) {
                 packet_circles_are_disjoint(moved),
                 "each one-axis drag preserves disjoint classical circles"
             );
+            double output_rmse = reference_output_rmse(baseline, moved);
+            CHECK(
+                output_rmse > 0.001,
+                "each real control direction changes reference output RMS"
+            );
+            printf(
+                "control=%d axis=%d output_rmse=%.8f\n",
+                control,
+                axis,
+                output_rmse
+            );
         }
     }
 }
@@ -246,6 +257,78 @@ static void test_control_domain_grid(void) {
             }
         }
     }
+}
+
+typedef struct { float x; float y; } rcpx;
+
+static rcpx rcpx_mul(rcpx a, rcpx b) {
+    return (rcpx){a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x};
+}
+
+static rcpx packet_value(const float *p, int offset, int region) {
+    return (rcpx){p[offset + 2 * region], p[offset + 2 * region + 1]};
+}
+
+static rcpx packet_map(const float *p, int region, rcpx z) {
+    rcpx a = packet_value(p, RENDERER_PACKET_A_OFFSET, region);
+    rcpx b = packet_value(p, RENDERER_PACKET_B_OFFSET, region);
+    rcpx c = packet_value(p, RENDERER_PACKET_C_OFFSET, region);
+    rcpx d = packet_value(p, RENDERER_PACKET_D_OFFSET, region);
+    rcpx az = rcpx_mul(a, z);
+    rcpx cz = rcpx_mul(c, z);
+    rcpx n = {az.x + b.x, az.y + b.y};
+    rcpx q = {cz.x + d.x, cz.y + d.y};
+    float q2 = q.x * q.x + q.y * q.y;
+    if (q2 < 1.0e-12f) return (rcpx){1.0e12f, 1.0e12f};
+    return (rcpx){
+        (n.x * q.x + n.y * q.y) / q2,
+        (n.y * q.x - n.x * q.y) / q2
+    };
+}
+
+static int packet_region(const float *p, rcpx z) {
+    for (int r = 0; r < LIMIT_SET_REGION_COUNT; ++r) {
+        float dx = z.x - p[RENDERER_PACKET_CIRCLE_CENTER_OFFSET + 2 * r];
+        float dy = z.y - p[RENDERER_PACKET_CIRCLE_CENTER_OFFSET + 2 * r + 1];
+        if (dx * dx + dy * dy <
+            p[RENDERER_PACKET_CIRCLE_RADIUS_SQUARED_OFFSET + r]) return r;
+    }
+    return -1;
+}
+
+static float reference_value(const float *p, int x, int y) {
+    const int width = 48;
+    const int height = 96;
+    rcpx z = {
+        ((float)x + 0.5f - 0.5f * width) * (4.0f / height),
+        ((float)y + 0.5f - 0.5f * height) * (4.0f / height)
+    };
+    int depth = 0;
+    int last = 0;
+    for (int step = 0; step < 24; ++step) {
+        int r = packet_region(p, z);
+        if (r < 0) break;
+        last = r;
+        z = packet_map(p, r, z);
+        ++depth;
+    }
+    float b = powf(fminf(((float)depth / 24.0f) * 3.2f, 1.0f), 0.72f);
+    if (depth == 24) b = 1.0f;
+    return b * ((last < 2) ? 0.66f : 0.74f);
+}
+
+static double reference_output_rmse(const float *a, const float *b) {
+    const int width = 48;
+    const int height = 96;
+    double sum = 0.0;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            double d = (double)reference_value(b, x, y) -
+                       (double)reference_value(a, x, y);
+            sum += d * d;
+        }
+    }
+    return sqrt(sum / (double)(width * height));
 }
 
 static void test_invalid_input_fails_closed(void) {
