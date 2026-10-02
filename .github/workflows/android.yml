@@ -17,8 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate embedded shader source boundaries
-        run: python3 tests/shader_source_test.py android/app/src/main/cpp/limit_set_renderer.c
+      - name: Install GLSL validator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools
+
+      - name: Validate embedded shader source and GLSL
+        run: |
+          python3 tests/shader_source_test.py android/app/src/main/cpp/limit_set_renderer.c /tmp/indras-shaders
+          glslangValidator -S vert /tmp/indras-shaders/limit_set.vert
+          glslangValidator -S frag /tmp/indras-shaders/limit_set.frag
 
       - name: Build and run deterministic host mathematics tests
         run: |
