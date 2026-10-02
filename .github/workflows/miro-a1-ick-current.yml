@@ -1,0 +1,343 @@
+name: MIRO A1 ICK native APK
+
+on:
+  push:
+    branches:
+      - ick-c-renderer-packet
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: miro-a1-ick-native-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      ANDROID_NDK_VERSION: 29.0.14206865
+      BUILD_TOOLS_VERSION: 36.0.0
+      ANDROID_API: 26
+      ICK_COMMIT: 08a827f81315ab4ef38ee797b20673a318586fe0
+      ANDROID_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      ANDROID_KEYSTORE_PASSWORD: wegert-debug
+      ANDROID_KEY_PASSWORD: wegert-debug
+      ANDROID_KEY_ALIAS: wegert-debug
+      ANDROID_EXPECTED_CERT_SHA256: DE:9B:1D:47:C5:A6:5E:6D:46:A2:04:B7:9D:D9:EE:56:6B:9D:3C:98:32:BA:81:EB:C4:21:3D:33:92:E9:2F:F9
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out stable public test signer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
+
+      - name: Check out pinned ICK
+        uses: actions/checkout@v4
+        with:
+          repository: dilapidated-shed/ick
+          ref: ${{ env.ICK_COMMIT }}
+          path: _ick
+          submodules: true
+
+      - name: Install ARMv7 assembler/linker
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-arm-linux-gnueabi
+
+      - name: Restore ARMv7 ICK compiler cache
+        id: ick-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: _ick/stage
+          key: ick-armv7-${{ env.ICK_COMMIT }}-ubuntu-24.04
+
+      - name: Build ARMv7 ICK C compiler
+        if: steps.ick-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential file flex bison texinfo \
+            libgmp-dev libmpfr-dev libmpc-dev libisl-dev libzstd-dev \
+            binutils-arm-linux-gnueabi
+          (
+            cd _ick
+            . ick/SOURCE.lock
+            test "$(git -C gcc rev-parse HEAD)" = "$gcc_commit"
+            sh ick/materialize.sh gcc source
+            mkdir build stage
+            cd build
+            ../source/configure \
+              --target=arm-linux-gnueabi \
+              --prefix="$GITHUB_WORKSPACE/_ick/stage" \
+              --with-as="$(command -v arm-linux-gnueabi-as)" \
+              --with-ld="$(command -v arm-linux-gnueabi-ld)" \
+              --enable-languages=c \
+              --disable-bootstrap \
+              --disable-multilib \
+              --disable-nls \
+              --disable-shared \
+              --disable-threads \
+              --without-headers \
+              --disable-libatomic \
+              --disable-libgomp \
+              --disable-libquadmath \
+              --disable-libssp \
+              --disable-libvtv
+            make -j2 all-gcc
+            make install-gcc
+          )
+          "$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc" --version
+
+      - name: Save ARMv7 ICK compiler cache
+        if: steps.ick-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: _ick/stage
+          key: ick-armv7-${{ env.ICK_COMMIT }}-ubuntu-24.04
+
+      - name: Record ICK compiler identity
+        run: "$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc --version | tee ick-version.txt"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager "platforms;android-36" "build-tools;$BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Preprocess Android headers with NDK and compile every native TU with ICK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          ndk="$sdk_root/ndk/$ANDROID_NDK_VERSION"
+          llvm_bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          ndk_cc="$llvm_bin/armv7a-linux-androideabi${ANDROID_API}-clang"
+          ick="$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc"
+          glue="$ndk/sources/android/native_app_glue"
+          srcdir="$GITHUB_WORKSPACE/android/app/src/main/cpp"
+          out="$GITHUB_WORKSPACE/ick-native"
+          mkdir -p "$out/preprocessed" "$out/objects" "$out/logs"
+
+          sources=(
+            "$srcdir/mobius_math.c"
+            "$srcdir/renderer_packet.c"
+            "$srcdir/parameter_controls.c"
+            "$srcdir/limit_set_renderer.c"
+            "$srcdir/native_app_glue_stub.c"
+            "$glue/android_native_app_glue.c"
+          )
+
+          flags=(-march=armv7-a -mthumb -mfpu=neon -mfloat-abi=softfp)
+          pp_compat=(
+            -U__clang__
+            -U__clang_major__
+            -U__clang_minor__
+            -U__clang_patchlevel__
+            -U__clang_version__
+            '-D_Nullable='
+            '-D_Nonnull='
+            '-D_Null_unspecified='
+            '-D_Nullable_result='
+            '-D__availability__(...)='
+            '-D__diagnose_if__(...)='
+            '-D__enable_if__(...)='
+            '-D__pass_object_size__(...)='
+            '-D__format__(...)='
+            '-DBIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD=1'
+          )
+          failed=0
+          : > "$out/compile-receipt.tsv"
+
+          for src in "${sources[@]}"; do
+            stem="$(basename "$src" .c)"
+            pp="$out/preprocessed/$stem.i"
+            obj="$out/objects/$stem.o"
+            pp_log="$out/logs/$stem.preprocess.log"
+            cc_log="$out/logs/$stem.ick.log"
+
+            if "$ndk_cc" -E -P -x c -std=gnu11 \
+                "${pp_compat[@]}" \
+                -D__ANDROID_API__="$ANDROID_API" \
+                -DINDRAS_FREESTANDING_MATH \
+                -I"$srcdir" -I"$glue" \
+                "$src" -o "$pp" >"$pp_log" 2>&1; then
+              sed -E -i 's/__attribute__\(\([[:space:]]*\)\)//g' "$pp"
+              printf '%s\tpreprocess\tPASS\n' "$stem" >> "$out/compile-receipt.tsv"
+            else
+              printf '%s\tpreprocess\tFAIL\n' "$stem" >> "$out/compile-receipt.tsv"
+              cat "$pp_log"
+              failed=1
+              continue
+            fi
+
+            if "$ick" "${flags[@]}" -x c -std=gnu11 -O2 -fPIC \
+                -ffunction-sections -fdata-sections \
+                -Wno-attributes \
+                -c "$pp" -o "$obj" >"$cc_log" 2>&1; then
+              printf '%s\tick-compile\tPASS\n' "$stem" >> "$out/compile-receipt.tsv"
+              arm-linux-gnueabi-readelf -h "$obj" > "$out/logs/$stem.elf.txt"
+              arm-linux-gnueabi-readelf -A "$obj" > "$out/logs/$stem.attributes.txt"
+              grep -q 'Class:.*ELF32' "$out/logs/$stem.elf.txt"
+              grep -q 'Machine:.*ARM' "$out/logs/$stem.elf.txt"
+              grep -Eq 'Tag_THUMB_ISA_use: Thumb-2|TagName: THUMB_ISA_use' "$out/logs/$stem.attributes.txt"
+              if grep -q 'Tag_ABI_VFP_args: VFP registers' "$out/logs/$stem.attributes.txt"; then
+                echo "$stem unexpectedly uses hard-float argument passing" >&2
+                failed=1
+              fi
+            else
+              printf '%s\tick-compile\tFAIL\n' "$stem" >> "$out/compile-receipt.tsv"
+              cat "$cc_log"
+              failed=1
+            fi
+          done
+
+          cat "$out/compile-receipt.tsv"
+          test "$failed" -eq 0
+
+          "$ndk_cc" -shared \
+            -Wl,-z,defs -Wl,-z,text -Wl,--fatal-warnings \
+            -Wl,--gc-sections -Wl,-soname,libindras_pearls.so \
+            -Wl,-u,ANativeActivity_onCreate \
+            "$out/objects/mobius_math.o" \
+            "$out/objects/renderer_packet.o" \
+            "$out/objects/parameter_controls.o" \
+            "$out/objects/limit_set_renderer.o" \
+            "$out/objects/native_app_glue_stub.o" \
+            "$out/objects/android_native_app_glue.o" \
+            -landroid -lEGL -lGLESv3 -llog -lm \
+            -o "$out/libindras_pearls.so"
+
+          "$llvm_bin/llvm-readelf" -h "$out/libindras_pearls.so" | tee "$out/final-elf-header.txt"
+          "$llvm_bin/llvm-readelf" -A "$out/libindras_pearls.so" | tee "$out/final-arm-attributes.txt"
+          "$llvm_bin/llvm-nm" -u "$out/libindras_pearls.so" | tee "$out/final-undefined.txt"
+          grep -q 'Class:.*ELF32' "$out/final-elf-header.txt"
+          grep -q 'Machine:.*ARM' "$out/final-elf-header.txt"
+          grep -Eq 'TagName: THUMB_ISA_use|Tag_THUMB_ISA_use: Thumb-2' "$out/final-arm-attributes.txt"
+
+          if grep -Eq '__aeabi_d|__(add|sub|mul|div)df3' "$out/final-undefined.txt"; then
+            echo "unexpected binary64 software helper escaped into final library" >&2
+            exit 1
+          fi
+
+      - name: Build Android container APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon -PmiroA1=true :android:app:assembleDebug
+
+      - name: Replace Clang library with ICK library, strip, align, sign, verify
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          llvm_bin="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          build_tools="$sdk_root/build-tools/$BUILD_TOOLS_VERSION"
+          raw="$GITHUB_WORKSPACE/android/app/build/outputs/apk/debug/app-debug.apk"
+          work="$RUNNER_TEMP/miro-a1-ick-apk"
+          unpack="$work/unpack"
+          unsigned="$work/unsigned.apk"
+          aligned="$work/aligned.apk"
+          final="$GITHUB_WORKSPACE/schottky-miro-a1-ick-thumb-stripped.apk"
+
+          rm -rf "$work"
+          mkdir -p "$unpack"
+          unzip -q "$raw" -d "$unpack"
+
+          test "$(find "$unpack/lib" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -u)" = "armeabi-v7a"
+          cp "$GITHUB_WORKSPACE/ick-native/libindras_pearls.so" \
+            "$unpack/lib/armeabi-v7a/libindras_pearls.so"
+
+          so="$unpack/lib/armeabi-v7a/libindras_pearls.so"
+          "$llvm_bin/llvm-strip" --strip-all "$so"
+          "$llvm_bin/llvm-readelf" -h "$so" | tee "$GITHUB_WORKSPACE/ick-final-elf.txt"
+          "$llvm_bin/llvm-readelf" -A "$so" | tee "$GITHUB_WORKSPACE/ick-final-attributes.txt"
+          "$llvm_bin/llvm-readelf" -SW "$so" | tee "$GITHUB_WORKSPACE/ick-final-sections.txt"
+
+          grep -q 'Class:.*ELF32' "$GITHUB_WORKSPACE/ick-final-elf.txt"
+          grep -q 'Machine:.*ARM' "$GITHUB_WORKSPACE/ick-final-elf.txt"
+          grep -Eq 'TagName: THUMB_ISA_use|Tag_THUMB_ISA_use: Thumb-2' "$GITHUB_WORKSPACE/ick-final-attributes.txt"
+          if grep -Eq '\.debug_[[:alnum:]_]+|[[:space:]]\.symtab[[:space:]]|[[:space:]]\.strtab[[:space:]]' "$GITHUB_WORKSPACE/ick-final-sections.txt"; then
+            echo "unstripped debug/static symbol sections remain" >&2
+            exit 1
+          fi
+
+          rm -rf "$unpack/META-INF"
+          (
+            cd "$unpack"
+            zip -q -X -r -0 "$unsigned" .
+          )
+          "$build_tools/zipalign" -f -P 16 4 "$unsigned" "$aligned"
+
+          keystore="$ANDROID_KEYSTORE"
+          test -f "$keystore"
+          signer_sha256=$(
+            keytool -list -v \
+              -keystore "$keystore" \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+              -alias "$ANDROID_KEY_ALIAS" 2>/dev/null |
+              sed -n 's/^[[:space:]]*SHA256: //p' |
+              head -n 1
+          )
+          test "$signer_sha256" = "$ANDROID_EXPECTED_CERT_SHA256"
+
+          "$build_tools/apksigner" sign \
+            --ks "$keystore" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+            --out "$final" "$aligned"
+
+          "$build_tools/zipalign" -c -P 16 -v 4 "$final" >/dev/null
+          "$build_tools/apksigner" verify --verbose --print-certs "$final" |
+            tee "$GITHUB_WORKSPACE/ick-final-signing.txt"
+          expected=$(printf '%s' "$ANDROID_EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')
+          grep -Fq "Signer #1 certificate SHA-256 digest: $expected" "$GITHUB_WORKSPACE/ick-final-signing.txt"
+          test "$(unzip -Z1 "$final" | awk -F/ '/^lib\// {print $2}' | sort -u)" = "armeabi-v7a"
+
+          sha256sum "$final" | tee "$GITHUB_WORKSPACE/ick-apk-sha256.txt"
+          stat -c '%n %s bytes' "$final" | tee "$GITHUB_WORKSPACE/ick-apk-size.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schottky-miro-a1-ick-native
+          path: |
+            schottky-miro-a1-ick-thumb-stripped.apk
+            ick-version.txt
+            ick-native/compile-receipt.tsv
+            ick-native/preprocessed/
+            ick-native/logs/
+            ick-native/final-elf-header.txt
+            ick-native/final-arm-attributes.txt
+            ick-native/final-undefined.txt
+            ick-final-elf.txt
+            ick-final-attributes.txt
+            ick-final-sections.txt
+            ick-apk-sha256.txt
+            ick-apk-size.txt
+            ick-final-signing.txt
+          if-no-files-found: warn
