@@ -60,7 +60,7 @@ static int packet_circles_are_disjoint(const float *packet) {
     return 1;
 }
 
-static int packet_is_finite(const float *packet) {
+static double reference_output_rmse(const float *a, const float *b);\n\nstatic int packet_is_finite(const float *packet) {
     for (int index = 0; index < RENDERER_PACKET_FLOAT_COUNT; ++index) {
         if (!isfinite(packet[index])) {
             return 0;
