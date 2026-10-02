@@ -378,8 +378,13 @@ static bool heap_pop(struct heap *heap, QueueItem *item) {
         }
         size_t right = left + 1u;
         size_t child = left;
+        /*
+         * Rust BinaryHeap's sift-down chooses the right child on equality
+         * (left <= right). QueueItem ordering ignores matrix/last, so this
+         * tie behavior is part of reproducing the reference heap layout.
+         */
         if (right < heap->len &&
-            heap->items[right].priority > heap->items[left].priority) {
+            heap->items[right].priority >= heap->items[left].priority) {
             child = right;
         }
         if (!(heap->items[child].priority > heap->items[index].priority)) {
