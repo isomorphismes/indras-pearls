@@ -39,6 +39,14 @@ jobs:
           "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2             -I android/app/src/main/cpp             android/app/src/main/cpp/original_kleinian.c             tests/original_kleinian_test.c -lm             -o /tmp/indras-pearls-original-kleinian-test
           /tmp/indras-pearls-original-kleinian-test
 
+          "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2 \
+            -I android/app/src/main/cpp \
+            android/app/src/main/cpp/original_kleinian.c \
+            android/app/src/main/cpp/original_trace_controls.c \
+            tests/original_trace_controls_test.c -lm \
+            -o /tmp/indras-pearls-original-trace-controls-test
+          /tmp/indras-pearls-original-trace-controls-test
+
   android:
     runs-on: ubuntu-latest
     env:
