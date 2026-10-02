@@ -7,6 +7,18 @@ android {
     compileSdk = 36
     ndkVersion = "29.0.14206865"
 
+    val stableKeystore = System.getenv("ANDROID_KEYSTORE")
+    if (stableKeystore != null) {
+        signingConfigs {
+            create("stableTest") {
+                storeFile = file(stableKeystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "wegert-debug"
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "wegert-debug"
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: storePassword
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "org.isomorphisms.indraspearls"
         minSdk = 26
@@ -21,6 +33,14 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += listOf("-DANDROID_STL=none")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (stableKeystore != null) {
+                signingConfig = signingConfigs.getByName("stableTest")
             }
         }
     }
