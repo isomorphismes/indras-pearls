@@ -33,7 +33,15 @@ jobs:
           path: _ick
           submodules: true
 
+      - name: Restore ARMv7 ICK compiler cache
+        id: ick-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: _ick/stage
+          key: ick-armv7-${{ env.ICK_COMMIT }}-ubuntu-24.04
+
       - name: Build ARMv7 ICK C compiler
+        if: steps.ick-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euxo pipefail
@@ -69,7 +77,17 @@ jobs:
             make -j2 all-gcc
             make install-gcc
           )
-          "$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc" --version | tee ick-version.txt
+          "$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc" --version
+
+      - name: Save ARMv7 ICK compiler cache
+        if: steps.ick-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: _ick/stage
+          key: ick-armv7-${{ env.ICK_COMMIT }}-ubuntu-24.04
+
+      - name: Record ICK compiler identity
+        run: "$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc --version | tee ick-version.txt"
 
       - uses: actions/setup-java@v4
         with:
@@ -114,6 +132,21 @@ jobs:
           )
 
           flags=(-march=armv7-a -mthumb -mfpu=neon -mfloat-abi=softfp)
+          pp_compat=(
+            -U__clang__
+            -U__clang_major__
+            -U__clang_minor__
+            -U__clang_patchlevel__
+            -U__clang_version__
+            '-D_Nullable='
+            '-D_Nonnull='
+            '-D_Null_unspecified='
+            '-D_Nullable_result='
+            '-D__availability__(...)='
+            '-D__diagnose_if__(...)='
+            '-D__enable_if__(...)='
+            '-D__pass_object_size__(...)='
+          )
           failed=0
           : > "$out/compile-receipt.tsv"
 
@@ -125,6 +158,7 @@ jobs:
             cc_log="$out/logs/$stem.ick.log"
 
             if "$ndk_cc" -E -P -x c -std=gnu11 \
+                "${pp_compat[@]}" \
                 -D__ANDROID_API__="$ANDROID_API" \
                 -DINDRAS_FREESTANDING_MATH \
                 -I"$srcdir" -I"$glue" \
@@ -269,6 +303,7 @@ jobs:
             schottky-miro-a1-ick-thumb-stripped.apk
             ick-version.txt
             ick-native/compile-receipt.tsv
+            ick-native/preprocessed/
             ick-native/logs/
             ick-native/final-elf-header.txt
             ick-native/final-arm-attributes.txt
