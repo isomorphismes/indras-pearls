@@ -3,7 +3,9 @@
 
 #include <stdbool.h>
 
-#define COMPLEX_PARAMETER_COUNT 3
+#include "renderer_packet.h"
+
+#define COMPLEX_PARAMETER_COUNT SCHOTTKY_PARAMETER_COUNT
 
 struct complex_value {
     float real;
@@ -16,6 +18,10 @@ struct complex_parameter_controls {
 };
 
 void initialize_complex_parameter_controls(struct complex_parameter_controls *controls);
+void complex_parameter_controls_flatten(
+    const struct complex_parameter_controls *controls,
+    float output[SCHOTTKY_PARAMETER_FLOAT_COUNT]
+);
 float complex_parameter_control_radius(int width, int height);
 void complex_parameter_control_center(
     int index,
