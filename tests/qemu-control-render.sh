@@ -3,15 +3,21 @@ set -euo pipefail
 
 apk="${1:?APK path is required}"
 out="${2:-qemu-control}"
+package="org.isomorphisms.indraspearls"
 
 mkdir -p "$out"
 printf 'state\tstarted\n' > "$out/status.tsv"
 test -f "$apk"
 
 adb install -r "$apk" | tee "$out/install.txt"
-adb shell am force-stop org.isomorphisms.indraspearls
+adb shell run-as "$package" mkdir -p files
+adb shell run-as "$package" touch files/frame-probe.enable
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+adb shell svc power stayon true
+adb shell am force-stop "$package"
 adb shell am start -W \
-    -n org.isomorphisms.indraspearls/android.app.NativeActivity \
+    -n "$package/android.app.NativeActivity" \
     | tee "$out/launch.txt"
 sleep 3
 
@@ -25,10 +31,19 @@ sleep 3
 } > "$out/environment.tsv"
 
 grep -F $'ro.kernel.qemu\t1' "$out/environment.tsv"
+adb shell dumpsys activity activities > "$out/activity.txt"
+grep -F "$package" "$out/activity.txt"
+
 adb logcat -d -s IndrasPearls:I > "$out/initial-logcat.txt"
 grep -E 'Schottky radius control r=0\.700' "$out/initial-logcat.txt"
+grep -E 'QEMU frame probe r=0\.700000 hash=[0-9a-f]+' "$out/initial-logcat.txt"
 
-adb exec-out screencap -p > "$out/before.png"
+before_hash="$(sed -n 's/.*QEMU frame probe r=0\.700000 hash=\([0-9a-f][0-9a-f]*\).*/\1/p' "$out/initial-logcat.txt" | tail -n 1)"
+test -n "$before_hash"
+adb exec-out run-as "$package" cat files/frame-probe.ppm > "$out/before-gpu.ppm"
+test -s "$out/before-gpu.ppm"
+convert "$out/before-gpu.ppm" "$out/before-gpu.png"
+adb exec-out screencap -p > "$out/before-display.png"
 
 size_line="$(adb shell wm size | tr -d '\r' | tail -n 1)"
 size="${size_line##*: }"
@@ -53,24 +68,27 @@ end_x="$center_x"
 adb logcat -c
 adb shell input swipe "$start_x" "$control_y" "$end_x" "$control_y" 600
 sleep 2
-adb exec-out screencap -p > "$out/after.png"
 adb logcat -d > "$out/logcat.txt"
 
 grep -E 'IndrasPearls.*Schottky radius control r=0\.400' "$out/logcat.txt"
+grep -E 'IndrasPearls.*QEMU frame probe r=0\.400000 hash=[0-9a-f]+' "$out/logcat.txt"
 
-crop_y=$((height * 25 / 100))
-crop_h=$((height * 65 / 100))
-convert "$out/before.png" \
-    -crop "${width}x${crop_h}+0+${crop_y}" +repage \
-    "$out/before-fractal.png"
-convert "$out/after.png" \
-    -crop "${width}x${crop_h}+0+${crop_y}" +repage \
-    "$out/after-fractal.png"
+after_hash="$(sed -n 's/.*QEMU frame probe r=0\.400000 hash=\([0-9a-f][0-9a-f]*\).*/\1/p' "$out/logcat.txt" | tail -n 1)"
+test -n "$after_hash"
+test "$before_hash" != "$after_hash"
+
+adb exec-out run-as "$package" cat files/frame-probe.ppm > "$out/after-gpu.ppm"
+test -s "$out/after-gpu.ppm"
+convert "$out/after-gpu.ppm" "$out/after-gpu.png"
+adb exec-out screencap -p > "$out/after-display.png"
+
+probe_size="$(identify -format '%wx%h' "$out/before-gpu.ppm")"
+test "$probe_size" = "$(identify -format '%wx%h' "$out/after-gpu.ppm")"
 
 compare_status=0
 if changed_pixels="$(compare -metric AE -fuzz 2% \
-    "$out/before-fractal.png" \
-    "$out/after-fractal.png" null: 2>&1)"; then
+    "$out/before-gpu.ppm" \
+    "$out/after-gpu.ppm" null: 2>&1)"; then
     compare_status=0
 else
     compare_status=$?
@@ -84,7 +102,10 @@ case "$changed_pixels" in
         ;;
 esac
 
-minimum_changed=$((width * crop_h / 1000))
+probe_width="${probe_size%x*}"
+probe_height="${probe_size#*x}"
+minimum_changed=$((probe_width * probe_height / 1000))
+echo "before_hash=$before_hash after_hash=$after_hash"
 echo "changed_pixels=$changed_pixels minimum_required=$minimum_changed"
 test "$changed_pixels" -gt "$minimum_changed"
 
@@ -92,7 +113,9 @@ test "$changed_pixels" -gt "$minimum_changed"
     printf 'state\tPASS\n'
     printf 'radius_before\t0.700\n'
     printf 'radius_after\t0.400\n'
+    printf 'frame_hash_before\t%s\n' "$before_hash"
+    printf 'frame_hash_after\t%s\n' "$after_hash"
     printf 'changed_pixels\t%s\n' "$changed_pixels"
     printf 'minimum_changed_pixels\t%s\n' "$minimum_changed"
-    printf 'crop\t%sx%s+0+%s\n' "$width" "$crop_h" "$crop_y"
+    printf 'probe_size\t%s\n' "$probe_size"
 } > "$out/status.tsv"

@@ -73,6 +73,7 @@ the limit-set view.
 - event-driven redraws when camera, radius, or window state changes.
 
 CI launches the APK in the Android emulator/QEMU path, drags the live radius
-control from the bundled `r = 0.7` position toward `r = 0.4`, verifies the
-parameter log receipt, and compares a lower-screen crop that excludes the
-control chrome. The test therefore requires the fractal itself to change.
+control from the bundled `r = 0.7` position to `r = 0.4`, verifies the
+parameter log receipt, and compares a debug-only GLES framebuffer crop below
+the control overlay. The test therefore requires the renderer's picture itself
+to change; compositor screenshots are retained only as diagnostics.

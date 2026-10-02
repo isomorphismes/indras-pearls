@@ -66,9 +66,12 @@ cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp \
 /tmp/indras-pearls-control-test
 ```
 
-CI then runs the built APK in an Android x86-64 emulator (QEMU), captures a
-baseline at `r = 0.7`, performs an ADB drag on the live control to approximately
-`r = 0.4`, and captures a second frame. It requires both a native log receipt
-for the new radius and a nontrivial pixel difference in the lower 65% of the
-screen. That crop excludes the control itself, so handle motion alone cannot
-satisfy the renderer test.
+CI then runs the built APK in an Android x86-64 emulator (QEMU), enables a
+debug-only framebuffer probe, captures the actual GLES output at `r = 0.7`,
+performs an ADB drag to `r = 0.4`, and captures the GLES output again. The
+probe reads only the lower renderer region, excluding the control overlay. The
+test requires the native semantic receipt, different framebuffer hashes, and a
+nontrivial pixel difference between the two GPU frames. Ordinary Android
+`screencap` images are retained only as diagnostics because a headless QEMU
+compositor can return a black display capture even while the app's accelerated
+surface is rendering.
