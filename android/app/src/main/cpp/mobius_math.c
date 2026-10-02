@@ -1,6 +1,17 @@
 #include "mobius_math.h"
 
+#ifdef INDRAS_FREESTANDING_MATH
+#define fabs __builtin_fabs
+#define fmax __builtin_fmax
+#define hypot __builtin_hypot
+#define sqrt __builtin_sqrt
+#define copysign __builtin_copysign
+#define isfinite __builtin_isfinite
+#define NAN (__builtin_nan(""))
+#define INFINITY (__builtin_inf())
+#else
 #include <math.h>
+#endif
 
 static const struct complex_number COMPLEX_ZERO = {0.0, 0.0};
 static const struct complex_number COMPLEX_ONE = {1.0, 0.0};
