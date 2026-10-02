@@ -24,11 +24,22 @@ private complex representations stay on the producer side. CI proves an
 units and Android NDK r29 Clang/lld performs the final Android shared-library
 link.
 
-The three disk controls remain an independent UI experiment. Each disk stores
-one complex value directly as its horizontal and vertical handle position,
-clamped to radius `0.94`. They do **not** yet map into the Schottky group.
-That keeps the parameter-chart decision separate from the now-working
-mathematics-to-renderer path.
+The three disk controls are now live Schottky parameters. Each disk stores one
+complex value, clamped to radius `0.94`, and all six real coordinates feed the
+validated group construction before redraw.
+
+The current chart is a classical-circle chart centered on the bundled group:
+
+- disk 1 moves the antipodal isometric-circle pair for generator `A` around
+  the default centers `±1`;
+- disk 2 moves the antipodal pair for generator `B` around `±i`;
+- disk 3 controls the two pairing phases, one phase per generator.
+
+The common circle radius is recomputed from the minimum separation of the four
+centers using a fixed factor below one half. That gives a positive disjointness
+margin over the whole control domain instead of accepting arbitrary matrix
+perturbations and hoping they remain classical. Zero controls reproduce the
+historical `r = 0.7` group.
 
 The renderer remains an independent native implementation. `philogb.md` and
 `notes/webgpu.md` are reference notes about Nico Belmonte's public
@@ -67,7 +78,8 @@ The APK is written under `android/app/build/outputs/apk/debug/`.
 
 ## Touch contract
 
-- drag inside one of the three disks: move that complex parameter handle;
+- drag inside any of the three disks: move that complex parameter and rebuild
+  the validated Schottky group/renderer packet;
 - one finger outside the disks: pan the complex plane;
 - two fingers outside the disks: zoom;
 - lift: leave both camera and parameter values where they are.
@@ -86,5 +98,8 @@ pinch the limit-set view.
 - three analytic disk controls drawn in the same fragment pass;
 - event-driven redraws when camera, controls, or window state changes.
 
-The next parameter step is to let a chosen control mode request a new validated
-group and packet rather than editing renderer coefficients directly.
+CI tests the full causal chain. Host tests exercise the actual touch-coordinate
+state machine and a 343-state three-disk grid. An Android emulator test then
+drags each disk through the real input path and requires the GLES framebuffer
+below the control overlay to change. A build/link receipt alone is therefore
+not treated as interaction integration.
