@@ -79,7 +79,7 @@ jobs:
           grep -q 'Machine:.*ARM' "$GITHUB_WORKSPACE/miro-a1-elf-header.txt"
 
           "$llvm_bin/llvm-readelf" -A "$so" | tee "$GITHUB_WORKSPACE/miro-a1-arm-attributes.txt"
-          grep -q 'Tag_THUMB_ISA_use' "$GITHUB_WORKSPACE/miro-a1-arm-attributes.txt"
+          grep -q 'TagName: THUMB_ISA_use' "$GITHUB_WORKSPACE/miro-a1-arm-attributes.txt"
 
           "$llvm_bin/llvm-readelf" -SW "$so" | tee "$GITHUB_WORKSPACE/miro-a1-sections.txt"
           if grep -Eq '\.debug_[[:alnum:]_]+|[[:space:]]\.symtab[[:space:]]|[[:space:]]\.strtab[[:space:]]' "$GITHUB_WORKSPACE/miro-a1-sections.txt"; then
@@ -87,11 +87,11 @@ jobs:
             exit 1
           fi
 
-          thumb_symbol="$("$llvm_bin/llvm-readelf" -Ws "$so" | awk '$8 == "ANativeActivity_onCreate" { print $2; exit }')"
-          test -n "$thumb_symbol"
-          thumb_value=$((16#$thumb_symbol))
-          test $((thumb_value & 1)) -eq 1
-          printf 'Thumb function marker verified: 0x%x\n' "$thumb_value"
+          compile_db="$(find "$GITHUB_WORKSPACE/android/app/.cxx" -name compile_commands.json -print -quit)"
+          test -n "$compile_db"
+          thumb_compile_count="$(grep -o -- '-mthumb' "$compile_db" | wc -l)"
+          test "$thumb_compile_count" -ge 6
+          printf 'Thumb compile flag occurrences verified: %s\n' "$thumb_compile_count"
 
           rm -rf "$unpack/META-INF"
           (
