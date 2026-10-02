@@ -35,8 +35,10 @@ def require(condition: bool, message: str) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: shader_source_test.py path/to/limit_set_renderer.c")
+    if len(sys.argv) not in (2, 3):
+        raise SystemExit(
+            "usage: shader_source_test.py path/to/limit_set_renderer.c [shader-output-directory]"
+        )
 
     source = pathlib.Path(sys.argv[1]).read_text()
     vertex = extract_c_string(source, "vertex_shader_source")
@@ -68,6 +70,12 @@ def main() -> int:
         require(forbidden_inverse not in candidate, "reduced candidate set included paired inverse")
         require(set(candidate) == set(range(4)) - {forbidden_inverse},
                 "reduced candidate set must contain every non-inverse region")
+
+    if len(sys.argv) == 3:
+        output_directory = pathlib.Path(sys.argv[2])
+        output_directory.mkdir(parents=True, exist_ok=True)
+        (output_directory / "limit_set.vert").write_text(vertex)
+        (output_directory / "limit_set.frag").write_text(fragment)
 
     print("embedded shader boundaries and reduced-word classifier: ok")
     return 0
