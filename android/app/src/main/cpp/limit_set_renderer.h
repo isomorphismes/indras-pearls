@@ -13,7 +13,8 @@ struct limit_set_renderer {
     GLint center_location;
     GLint scale_location;
     GLint resolution_location;
-    GLint circle_center_location;
+    GLint circle_center_x_location;
+    GLint circle_center_y_location;
     GLint circle_radius_squared_location;
     GLint a_location;
     GLint b_location;
