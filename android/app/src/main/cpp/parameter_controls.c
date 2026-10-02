@@ -39,6 +39,16 @@ void initialize_complex_parameter_controls(struct complex_parameter_controls *co
     controls->active_index = -1;
 }
 
+void complex_parameter_controls_flatten(
+    const struct complex_parameter_controls *controls,
+    float output[SCHOTTKY_PARAMETER_FLOAT_COUNT]
+) {
+    for (int index = 0; index < COMPLEX_PARAMETER_COUNT; ++index) {
+        output[index * 2] = controls->value[index].real;
+        output[index * 2 + 1] = controls->value[index].imaginary;
+    }
+}
+
 static void set_control_from_input(
     struct complex_parameter_controls *controls,
     int index,
@@ -60,7 +70,7 @@ static void set_control_from_input(
     float real = (input_x - center_x) / radius;
     float imaginary = (framebuffer_y - center_y) / radius;
     float magnitude_squared = real * real + imaginary * imaginary;
-    const float maximum_radius = 0.94f;
+    const float maximum_radius = SCHOTTKY_PARAMETER_LIMIT;
 
     if (magnitude_squared > maximum_radius * maximum_radius) {
         float magnitude = sqrtf(magnitude_squared);
