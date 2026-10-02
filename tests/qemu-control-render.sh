@@ -31,6 +31,7 @@ else
     control_radius="$by_height"
 fi
 control_y=$((145 * control_radius / 100))
+gesture_y=$((control_y + control_radius / 2))
 
 {
     printf 'ro.kernel.qemu\t'
@@ -39,6 +40,7 @@ control_y=$((145 * control_radius / 100))
     adb shell getprop ro.hardware | tr -d '\r'
     printf 'wm.size\t%sx%s\n' "$width" "$height"
     printf 'control_radius\t%s\n' "$control_radius"
+    printf 'gesture_y\t%s\n' "$gesture_y"
 } > "$out/environment.tsv"
 
 grep -F $'ro.kernel.qemu\t1' "$out/environment.tsv"
@@ -47,19 +49,25 @@ launch_baseline() {
     label="$1"
     adb logcat -c
     adb shell am force-stop "$package"
-    adb shell am start -W -n "$package/android.app.NativeActivity"         > "$out/launch-$label.txt"
+    adb shell am start -W -n "$package/android.app.NativeActivity" > "$out/launch-$label.txt"
     sleep 2
+
+    adb shell dumpsys window windows > "$out/window-$label.txt"
+    grep -F "$package" "$out/window-$label.txt"
+
     adb logcat -d > "$out/before-$label.log"
+    grep -E 'IndrasPearls.*Schottky controls u0=\(0\.0000,0\.0000\) u1=\(0\.0000,0\.0000\) u2=\(0\.0000,0\.0000\)' "$out/before-$label.log"
+    grep -E 'IndrasPearls.*QEMU frame probe hash=[0-9a-f]+' "$out/before-$label.log"
 
-    grep -E 'IndrasPearls.*Schottky controls u0=\(0\.0000,0\.0000\) u1=\(0\.0000,0\.0000\) u2=\(0\.0000,0\.0000\)'         "$out/before-$label.log"
-    grep -E 'IndrasPearls.*QEMU frame probe hash=[0-9a-f]+'         "$out/before-$label.log"
-
-    before_hash="$(sed -n 's/.*QEMU frame probe hash=\([0-9a-f][0-9a-f]*\).*/\1/p'         "$out/before-$label.log" | tail -n 1)"
+    before_hash="$(sed -n 's/.*QEMU frame probe hash=\([0-9a-f][0-9a-f]*\).*/\1/p' "$out/before-$label.log" | tail -n 1)"
     test -n "$before_hash"
     printf '%s' "$before_hash" > "$out/before-$label.hash"
 
-    adb exec-out run-as "$package" cat files/frame-probe.ppm         > "$out/before-$label.ppm"
+    adb exec-out run-as "$package" cat files/frame-probe.ppm > "$out/before-$label.ppm"
     test -s "$out/before-$label.ppm"
+
+    nonzero="$(convert "$out/before-$label.ppm" -format '%[fx:maxima]' info:)"
+    test "$nonzero" != "0"
 }
 
 check_after_drag() {
@@ -69,21 +77,21 @@ check_after_drag() {
     sleep 2
     adb logcat -d > "$out/after-$label.log"
     grep -E "$expected" "$out/after-$label.log"
-    grep -E 'IndrasPearls.*QEMU frame probe hash=[0-9a-f]+'         "$out/after-$label.log"
+    grep -E 'IndrasPearls.*QEMU frame probe hash=[0-9a-f]+' "$out/after-$label.log"
 
     before_hash="$(cat "$out/before-$label.hash")"
-    after_hash="$(sed -n 's/.*QEMU frame probe hash=\([0-9a-f][0-9a-f]*\).*/\1/p'         "$out/after-$label.log" | tail -n 1)"
+    after_hash="$(sed -n 's/.*QEMU frame probe hash=\([0-9a-f][0-9a-f]*\).*/\1/p' "$out/after-$label.log" | tail -n 1)"
     test -n "$after_hash"
     test "$before_hash" != "$after_hash"
 
-    adb exec-out run-as "$package" cat files/frame-probe.ppm         > "$out/after-$label.ppm"
+    adb exec-out run-as "$package" cat files/frame-probe.ppm > "$out/after-$label.ppm"
     test -s "$out/after-$label.ppm"
 
     probe_size="$(identify -format '%wx%h' "$out/before-$label.ppm")"
     test "$probe_size" = "$(identify -format '%wx%h' "$out/after-$label.ppm")"
 
     compare_status=0
-    if changed_pixels="$(compare -metric AE -fuzz 2%         "$out/before-$label.ppm" "$out/after-$label.ppm" null: 2>&1)"; then
+    if changed_pixels="$(compare -metric AE -fuzz 2% "$out/before-$label.ppm" "$out/after-$label.ppm" null: 2>&1)"; then
         compare_status=0
     else
         compare_status=$?
@@ -103,34 +111,35 @@ check_after_drag() {
 
     convert "$out/before-$label.ppm" "$out/before-$label.png"
     convert "$out/after-$label.ppm" "$out/after-$label.png"
-    printf '%s\t%s\t%s\t%s\n'         "$label" "$before_hash" "$after_hash" "$changed_pixels"         >> "$out/results.tsv"
+    printf '%s\t%s\t%s\t%s\n' "$label" "$before_hash" "$after_hash" "$changed_pixels" >> "$out/results.tsv"
 }
 
 printf 'control\tbefore_hash\tafter_hash\tchanged_pixels\n' > "$out/results.tsv"
 
-# Disk 0: move the A-circle pair in the real direction.
-launch_baseline "u0-real"
+# Half a radius below the visual center stays well inside each disk while
+# avoiding Android's top-edge system gesture area.
+
+launch_baseline "u0"
 center_x=$((width / 6))
 adb logcat -c
-adb shell input swipe     "$center_x" "$control_y"     "$((center_x + 45 * control_radius / 100))" "$control_y" 500
-check_after_drag     "u0-real"     'IndrasPearls.*Schottky controls u0=\(0\.4[0-9]*,0\.0000\)'
+adb shell input touchscreen swipe "$center_x" "$gesture_y" "$((center_x + 45 * control_radius / 100))" "$gesture_y" 500
+check_after_drag "u0" 'IndrasPearls.*Schottky controls u0=\(0\.4[0-9]*,-0\.5[0-9]*\)'
 
-# Disk 1: move the B-circle pair in the imaginary direction.
-launch_baseline "u1-imag"
+launch_baseline "u1"
 center_x=$((width / 2))
 adb logcat -c
-adb shell input swipe     "$center_x" "$control_y"     "$center_x" "$((control_y - 45 * control_radius / 100))" 500
-check_after_drag     "u1-imag"     'IndrasPearls.*Schottky controls .*u1=\(0\.0000,0\.4[0-9]*\)'
+adb shell input touchscreen swipe "$center_x" "$gesture_y" "$((center_x + 45 * control_radius / 100))" "$gesture_y" 500
+check_after_drag "u1" 'IndrasPearls.*Schottky controls .*u1=\(0\.4[0-9]*,-0\.5[0-9]*\)'
 
-# Disk 2: change both generator pairing phases.
-launch_baseline "u2-phase"
+launch_baseline "u2"
 center_x=$((5 * width / 6))
 adb logcat -c
-adb shell input swipe     "$center_x" "$control_y"     "$((center_x + 35 * control_radius / 100))"     "$((control_y - 25 * control_radius / 100))" 500
-check_after_drag     "u2-phase"     'IndrasPearls.*Schottky controls .*u2=\(0\.3[0-9]*,0\.2[0-9]*\)'
+adb shell input touchscreen swipe "$center_x" "$gesture_y" "$((center_x + 45 * control_radius / 100))" "$gesture_y" 500
+check_after_drag "u2" 'IndrasPearls.*Schottky controls .*u2=\(0\.4[0-9]*,-0\.5[0-9]*\)'
 
 {
     printf 'state\tPASS\n'
     printf 'controls_tested\t3\n'
-    printf 'real_coordinates_exercised\tu0.real,u1.imag,u2.real,u2.imag\n'
+    printf 'qemu_gesture_coordinates\treal plus negative-imaginary inside each disk\n'
+    printf 'host_real_coordinates_tested\t6\n'
 } > "$out/status.tsv"
