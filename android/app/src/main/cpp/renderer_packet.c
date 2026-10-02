@@ -2,6 +2,9 @@
 
 #include "mobius_math.h"
 
+_Static_assert(INDRAS_CIRCLE_COUNT == LIMIT_SET_REGION_COUNT,
+               "renderer packet and mathematical circle counts must match");
+
 static int store_complex(
     float output[static RENDERER_PACKET_FLOAT_COUNT],
     int offset,
