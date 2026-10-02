@@ -10,6 +10,7 @@
 struct limit_set_renderer {
     GLuint program;
     GLuint vertex_array;
+    GLuint vertex_buffer;
     GLint center_location;
     GLint scale_location;
     GLint resolution_location;
