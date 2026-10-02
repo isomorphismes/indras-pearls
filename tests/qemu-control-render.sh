@@ -120,15 +120,34 @@ check_after_drag() {
     esac
 
     minimum_changed=$((width * crop_height / 2000))
-    echo "$label before=$before_hash after=$after_hash changed_pixels=$changed_pixels minimum=$minimum_changed"
     test "$changed_pixels" -gt "$minimum_changed"
 
-    printf '%s\t%s\t%s\t%s\n' \
-        "$label" "$before_hash" "$after_hash" "$changed_pixels" \
+    rmse_status=0
+    if rmse_metric="$(compare -metric RMSE \
+        "$out/before-$label.png" "$out/after-$label.png" null: 2>&1)"; then
+        rmse_status=0
+    else
+        rmse_status=$?
+    fi
+    test "$rmse_status" -eq 1
+
+    normalized_rmse="$(printf '%s\n' "$rmse_metric" \
+        | sed -n 's/.*(\([0-9.eE+-][0-9.eE+-]*\)).*/\1/p')"
+    test -n "$normalized_rmse"
+
+    # The crop excludes the control disks, so this RMS is a scalar measure of
+    # change in the Schottky diagram itself rather than movement of the handle.
+    # Require at least 0.1% of full channel scale RMS across the whole crop.
+    awk -v value="$normalized_rmse" 'BEGIN { exit !(value > 0.001) }'
+
+    echo "$label before=$before_hash after=$after_hash changed_pixels=$changed_pixels minimum=$minimum_changed normalized_rmse=$normalized_rmse"
+
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$label" "$before_hash" "$after_hash" "$changed_pixels" "$normalized_rmse" \
         >> "$out/results.tsv"
 }
 
-printf 'control\tbefore_hash\tafter_hash\tchanged_pixels\n' > "$out/results.tsv"
+printf 'control\tbefore_hash\tafter_hash\tchanged_pixels\tnormalized_rmse\n' > "$out/results.tsv"
 
 # Disk 0: move the A-circle pair.
 launch_baseline "u0"
