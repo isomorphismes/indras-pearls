@@ -1,6 +1,7 @@
 #include "limit_set_renderer.h"
 
 #include <android/log.h>
+#include <math.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -15,7 +16,44 @@ static const char *vertex_shader_source =
     "    vec2(-1.0,  3.0)\n"
     ");\n"
     "void main() {\n"
-    "    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n"
+    "    vec3 background = vec3(0.012, 0.014, 0.020);\n"
+    "    if (u_initial_region < 0) {\n"
+    "        fragment_color = vec4(draw_parameter_controls(background), 1.0);\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
+    "    vec2 pixel_from_center = gl_FragCoord.xy - 0.5 * u_resolution;\n"
+    "    vec2 z = u_center + pixel_from_center * (u_scale / u_resolution.y);\n"
+    "    int first_region = u_initial_region;\n"
+    "    vec2 first_offset = z - u_circle_center[first_region];\n"
+    "    if (dot(first_offset, first_offset) >= u_circle_radius_squared[first_region]) {\n"
+    "        discard;\n"
+    "    }\n"
+    "\n"
+    "    int depth = 1;\n"
+    "    int last_region = first_region;\n"
+    "    z = apply_mobius(first_region, z);\n"
+    "    for (int step = 1; step < MAX_STEPS; ++step) {\n"
+    "        int region = containing_region(z);\n"
+    "        if (region < 0) {\n"
+    "            break;\n"
+    "        }\n"
+    "        last_region = region;\n"
+    "        z = apply_mobius(region, z);\n"
+    "        depth += 1;\n"
+    "    }\n"
+    "\n"
+    "    float depth_value = float(depth) / float(MAX_STEPS);\n"
+    "    float brightness = pow(clamp(depth_value * 3.2, 0.0, 1.0), 0.72);\n"
+    "    if (depth == MAX_STEPS) {\n"
+    "        brightness = 1.0;\n"
+    "    }\n"
+    "\n"
+    "    vec3 cool = vec3(0.36, 0.66, 0.92);\n"
+    "    vec3 warm = vec3(0.92, 0.74, 0.44);\n"
+    "    vec3 pearl = (last_region == 0 || last_region == 1) ? cool : warm;\n"
+    "    vec3 color = mix(background, pearl, brightness);\n"
+    "    fragment_color = vec4(draw_parameter_controls(color), 1.0);\n"
     "}\n";
 
 static const char *fragment_shader_source =
@@ -39,6 +77,7 @@ static const char *fragment_shader_source =
     "uniform vec2 u_parameter_value[PARAMETER_COUNT];\n"
     "uniform float u_parameter_radius;\n"
     "uniform int u_active_parameter;\n"
+    "uniform int u_initial_region;\n"
     "\n"
     "out vec4 fragment_color;\n"
     "\n"
@@ -206,6 +245,7 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
     renderer->parameter_value_location = glGetUniformLocation(renderer->program, "u_parameter_value[0]");
     renderer->parameter_radius_location = glGetUniformLocation(renderer->program, "u_parameter_radius");
     renderer->active_parameter_location = glGetUniformLocation(renderer->program, "u_active_parameter");
+    renderer->initial_region_location = glGetUniformLocation(renderer->program, "u_initial_region");
 
     return renderer->center_location >= 0 &&
         renderer->scale_location >= 0 &&
@@ -219,7 +259,8 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
         renderer->parameter_center_location >= 0 &&
         renderer->parameter_value_location >= 0 &&
         renderer->parameter_radius_location >= 0 &&
-        renderer->active_parameter_location >= 0;
+        renderer->active_parameter_location >= 0 &&
+        renderer->initial_region_location >= 0;
 }
 
 bool initialize_limit_set_renderer(struct limit_set_renderer *renderer) {
@@ -308,6 +349,56 @@ static void copy_parameter_controls(
     }
 }
 
+static bool set_region_scissor(
+    const float renderer_packet[static RENDERER_PACKET_FLOAT_COUNT],
+    int region,
+    float center_x,
+    float center_y,
+    float scale,
+    int width,
+    int height
+) {
+    if (width <= 0 || height <= 0 || !isfinite(scale) || scale == 0.0f) {
+        return false;
+    }
+
+    const float pixels_per_world = (float)height / scale;
+    if (!isfinite(pixels_per_world)) {
+        return false;
+    }
+
+    const int complex_offset = region * RENDERER_COMPLEX_COMPONENT_COUNT;
+    const float circle_x =
+        renderer_packet[RENDERER_PACKET_CIRCLE_CENTER_OFFSET + complex_offset];
+    const float circle_y =
+        renderer_packet[RENDERER_PACKET_CIRCLE_CENTER_OFFSET + complex_offset + 1];
+    const float radius_squared =
+        renderer_packet[RENDERER_PACKET_CIRCLE_RADIUS_SQUARED_OFFSET + region];
+    const float screen_x =
+        (circle_x - center_x) * pixels_per_world + 0.5f * (float)width;
+    const float screen_y =
+        (circle_y - center_y) * pixels_per_world + 0.5f * (float)height;
+    const float radius_pixels = sqrtf(radius_squared) * fabsf(pixels_per_world);
+
+    const float left_f = fmaxf(0.0f, floorf(screen_x - radius_pixels));
+    const float bottom_f = fmaxf(0.0f, floorf(screen_y - radius_pixels));
+    const float right_f = fminf((float)width, ceilf(screen_x + radius_pixels));
+    const float top_f = fminf((float)height, ceilf(screen_y + radius_pixels));
+
+    if (!(left_f < right_f && bottom_f < top_f)) {
+        return false;
+    }
+
+    glScissor(
+        (GLint)left_f,
+        (GLint)bottom_f,
+        (GLsizei)(right_f - left_f),
+        (GLsizei)(top_f - bottom_f)
+    );
+    return true;
+}
+
+
 void draw_limit_set(
     const struct limit_set_renderer *renderer,
     const float renderer_packet[static RENDERER_PACKET_FLOAT_COUNT],
@@ -376,6 +467,25 @@ void draw_limit_set(
     );
     glUniform1i(renderer->active_parameter_location, controls->active_index);
 
+    glDisable(GL_SCISSOR_TEST);
+    glUniform1i(renderer->initial_region_location, -1);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    glEnable(GL_SCISSOR_TEST);
+    for (int region = 0; region < LIMIT_SET_REGION_COUNT; ++region) {
+        if (!set_region_scissor(
+                renderer_packet,
+                region,
+                center_x,
+                center_y,
+                scale,
+                width,
+                height)) {
+            continue;
+        }
+        glUniform1i(renderer->initial_region_location, region);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    glDisable(GL_SCISSOR_TEST);
     glBindVertexArray(0);
 }
