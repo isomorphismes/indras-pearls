@@ -10,6 +10,8 @@ printf 'state\tstarted\n' > "$out/status.tsv"
 test -f "$apk"
 
 adb install -r "$apk" | tee "$out/install.txt"
+adb shell run-as "$package" mkdir -p files
+adb shell run-as "$package" touch files/frame-probe.enable
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 adb shell svc power stayon true
@@ -100,6 +102,25 @@ launch_baseline() {
     )"
     test -n "$before_packet"
     printf '%s' "$before_packet" > "$out/before-$label.packet"
+
+    before_gpu_hash="$(
+        sed -n 's/^.*GPU frame probe .*rgbhash=\([0-9a-fA-F][0-9a-fA-F]*\).*$/\1/p' \
+            "$out/before-$label.log" | tail -n 1
+    )"
+    before_gpu_max="$(
+        sed -n 's/^.*GPU frame probe .*max=\([0-9][0-9]*\).*$/\1/p' \
+            "$out/before-$label.log" | tail -n 1
+    )"
+    before_gpu_nonblack="$(
+        sed -n 's/^.*GPU frame probe .*nonblack=\([0-9][0-9]*\).*$/\1/p' \
+            "$out/before-$label.log" | tail -n 1
+    )"
+    test -n "$before_gpu_hash"
+    test -n "$before_gpu_max"
+    test -n "$before_gpu_nonblack"
+    test "$before_gpu_max" -gt 20
+    test "$before_gpu_nonblack" -gt "$((width * crop_height / 1000))"
+    printf '%s' "$before_gpu_hash" > "$out/before-$label.gpu-hash"
 }
 
 check_after_drag() {
@@ -121,6 +142,26 @@ check_after_drag() {
     )"
     test -n "$after_packet"
     test "$before_packet" != "$after_packet"
+
+    before_gpu_hash="$(cat "$out/before-$label.gpu-hash")"
+    after_gpu_hash="$(
+        sed -n 's/^.*GPU frame probe .*rgbhash=\([0-9a-fA-F][0-9a-fA-F]*\).*$/\1/p' \
+            "$out/after-$label.log" | tail -n 1
+    )"
+    after_gpu_max="$(
+        sed -n 's/^.*GPU frame probe .*max=\([0-9][0-9]*\).*$/\1/p' \
+            "$out/after-$label.log" | tail -n 1
+    )"
+    after_gpu_nonblack="$(
+        sed -n 's/^.*GPU frame probe .*nonblack=\([0-9][0-9]*\).*$/\1/p' \
+            "$out/after-$label.log" | tail -n 1
+    )"
+    test -n "$after_gpu_hash"
+    test -n "$after_gpu_max"
+    test -n "$after_gpu_nonblack"
+    test "$after_gpu_max" -gt 20
+    test "$after_gpu_nonblack" -gt "$((width * crop_height / 1000))"
+    test "$before_gpu_hash" != "$after_gpu_hash"
 
     compare_status=0
     if changed_pixels="$(compare -metric AE -fuzz 2% -channel RGB \
@@ -158,14 +199,15 @@ check_after_drag() {
     # Require at least 0.1% of full channel scale RMS across the whole crop.
     awk -v value="$normalized_rmse" 'BEGIN { exit !(value > 0.001) }'
 
-    echo "$label before=$before_hash after=$after_hash before_packet=$before_packet after_packet=$after_packet changed_pixels=$changed_pixels minimum=$minimum_changed normalized_rmse=$normalized_rmse"
+    echo "$label before=$before_hash after=$after_hash before_packet=$before_packet after_packet=$after_packet before_gpu=$before_gpu_hash after_gpu=$after_gpu_hash changed_pixels=$changed_pixels minimum=$minimum_changed normalized_rmse=$normalized_rmse"
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$label" "$before_hash" "$after_hash" "$before_packet" "$after_packet" \
-        "$changed_pixels" "$normalized_rmse" >> "$out/results.tsv"
+        "$before_gpu_hash" "$after_gpu_hash" "$changed_pixels" "$normalized_rmse" \
+        >> "$out/results.tsv"
 }
 
-printf 'control\tbefore_rgb_hash\tafter_rgb_hash\tbefore_packet\tafter_packet\tchanged_pixels\tnormalized_rmse\n' > "$out/results.tsv"
+printf 'control\tbefore_rgb_hash\tafter_rgb_hash\tbefore_packet\tafter_packet\tbefore_gpu_hash\tafter_gpu_hash\tchanged_pixels\tnormalized_rmse\n' > "$out/results.tsv"
 
 # Disk 0: move the A-circle pair.
 launch_baseline "u0"
