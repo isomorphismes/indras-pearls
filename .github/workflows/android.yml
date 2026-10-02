@@ -24,8 +24,22 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
+    env:
+      INDRAS_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
+      INDRAS_TEST_KEYSTORE_PASSWORD: wegert-debug
+      INDRAS_TEST_KEY_ALIAS: wegert-debug
+      INDRAS_TEST_KEY_PASSWORD: wegert-debug
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check out stable public test signer
+        uses: actions/checkout@v4
+        with:
+          repository: isomorphismes/wegert
+          ref: 89dcfb840cec1a66ee04c7f7404954cbd6c09839
+          path: .test-signing
+          sparse-checkout: _/build/app/wegert-debug.keystore
+          sparse-checkout-cone-mode: false
 
       - uses: actions/setup-java@v4
         with:
@@ -46,6 +60,12 @@ jobs:
 
       - name: Build debug APK
         run: gradle --no-daemon :android:app:assembleDebug
+
+      - name: Verify standard APK signer
+        uses: isomorphisms/ai-ci/android-signing@fbac8ed36c1aa9c14024c92b724fb334ffbbcef3
+        with:
+          apk: android/app/build/outputs/apk/debug/app-debug.apk
+          lane: test
 
       - uses: actions/upload-artifact@v4
         with:
