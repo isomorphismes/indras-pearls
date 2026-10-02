@@ -10,13 +10,9 @@
 
 static const char *vertex_shader_source =
     "#version 300 es\n"
-    "const vec2 positions[3] = vec2[3](\n"
-    "    vec2(-1.0, -1.0),\n"
-    "    vec2( 3.0, -1.0),\n"
-    "    vec2(-1.0,  3.0)\n"
-    ");\n"
+    "layout(location = 0) in vec2 a_position;\n"
     "void main() {\n"
-    "    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n"
+    "    gl_Position = vec4(a_position, 0.0, 1.0);\n"
     "}\n";
 
 static const char *fragment_shader_source =
@@ -269,9 +265,43 @@ bool initialize_limit_set_renderer(struct limit_set_renderer *renderer) {
         return false;
     }
 
+    static const GLfloat fullscreen_triangle[] = {
+        -1.0f, -1.0f,
+         3.0f, -1.0f,
+        -1.0f,  3.0f,
+    };
+
     glGenVertexArrays(1, &renderer->vertex_array);
-    if (renderer->vertex_array == 0) {
-        LOGE("glGenVertexArrays failed: 0x%x", glGetError());
+    glGenBuffers(1, &renderer->vertex_buffer);
+    if (renderer->vertex_array == 0 || renderer->vertex_buffer == 0) {
+        LOGE("could not allocate full-screen triangle objects: 0x%x", glGetError());
+        terminate_limit_set_renderer(renderer);
+        return false;
+    }
+
+    glBindVertexArray(renderer->vertex_array);
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->vertex_buffer);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        sizeof(fullscreen_triangle),
+        fullscreen_triangle,
+        GL_STATIC_DRAW
+    );
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(
+        0,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        2 * (GLsizei)sizeof(GLfloat),
+        (const void *)0
+    );
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    const GLenum geometry_error = glGetError();
+    if (geometry_error != GL_NO_ERROR) {
+        LOGE("could not initialize full-screen triangle: 0x%x", geometry_error);
         terminate_limit_set_renderer(renderer);
         return false;
     }
@@ -280,6 +310,9 @@ bool initialize_limit_set_renderer(struct limit_set_renderer *renderer) {
 }
 
 void terminate_limit_set_renderer(struct limit_set_renderer *renderer) {
+    if (renderer->vertex_buffer != 0) {
+        glDeleteBuffers(1, &renderer->vertex_buffer);
+    }
     if (renderer->vertex_array != 0) {
         glDeleteVertexArrays(1, &renderer->vertex_array);
     }
