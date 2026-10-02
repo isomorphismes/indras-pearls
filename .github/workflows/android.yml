@@ -72,7 +72,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: indras-pearls-touch-stub
+          name: indras-pearls-candidate-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
 
@@ -298,7 +298,7 @@ jobs:
       - name: Download exact APK from this workflow
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: indras-pearls-touch-stub
+          name: indras-pearls-candidate-debug
           path: qemu-apk
 
       - name: Install image comparison utility
@@ -328,6 +328,17 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: bash tests/qemu-control-render.sh qemu-apk/app-debug.apk qemu-control
+
+      - name: Publish emulator-accepted APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-accepted-debug
+          path: |
+            qemu-apk/app-debug.apk
+            qemu-control/status.tsv
+            qemu-control/results.tsv
+            qemu-control/environment.tsv
+          if-no-files-found: error
 
       - name: Retain QEMU causal evidence
         if: always()
