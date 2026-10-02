@@ -43,7 +43,7 @@ test -n "$before_hash"
 adb exec-out run-as "$package" cat files/frame-probe.ppm > "$out/before-gpu.ppm"
 test -s "$out/before-gpu.ppm"
 convert "$out/before-gpu.ppm" "$out/before-gpu.png"
-adb exec-out screencap -p > "$out/before-display.png"
+adb exec-out screencap -p > "$out/before-display.png" || true
 
 size_line="$(adb shell wm size | tr -d '\r' | tail -n 1)"
 size="${size_line##*: }"
@@ -65,6 +65,8 @@ control_y=$((145 * control_radius / 100))
 start_x=$((center_x + 94 * control_radius / 100))
 end_x="$center_x"
 
+printf 'swipe\t%s,%s -> %s,%s\n' "$start_x" "$control_y" "$end_x" "$control_y" \
+    | tee "$out/input.tsv"
 adb logcat -c
 adb shell input swipe "$start_x" "$control_y" "$end_x" "$control_y" 600
 sleep 2
@@ -80,7 +82,7 @@ test "$before_hash" != "$after_hash"
 adb exec-out run-as "$package" cat files/frame-probe.ppm > "$out/after-gpu.ppm"
 test -s "$out/after-gpu.ppm"
 convert "$out/after-gpu.ppm" "$out/after-gpu.png"
-adb exec-out screencap -p > "$out/after-display.png"
+adb exec-out screencap -p > "$out/after-display.png" || true
 
 probe_size="$(identify -format '%wx%h' "$out/before-gpu.ppm")"
 test "$probe_size" = "$(identify -format '%wx%h' "$out/after-gpu.ppm")"

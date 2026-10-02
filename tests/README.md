@@ -67,9 +67,10 @@ cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp \
 ```
 
 CI then runs the built APK in an Android x86-64 emulator (QEMU), enables a
-debug-only framebuffer probe, captures the actual GLES output at `r = 0.7`,
-performs an ADB drag to `r = 0.4`, and captures the GLES output again. The
-probe reads only the lower renderer region, excluding the control overlay. The
+debug-only framebuffer probe, renders through the same GLES shader path into a
+deterministic offscreen framebuffer at `r = 0.7`, performs an ADB drag to
+`r = 0.4`, and renders that same path again. The probe reads only the lower
+renderer region, excluding the control overlay. The
 test requires the native semantic receipt, different framebuffer hashes, and a
 nontrivial pixel difference between the two GPU frames. Ordinary Android
 `screencap` images are retained only as diagnostics because a headless QEMU

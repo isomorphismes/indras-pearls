@@ -220,6 +220,57 @@ static void write_frame_probe(struct engine *engine) {
         return;
     }
 
+    GLuint framebuffer = 0;
+    GLuint color_buffer = 0;
+    glGenFramebuffers(1, &framebuffer);
+    glGenRenderbuffers(1, &color_buffer);
+    if (framebuffer == 0 || color_buffer == 0) {
+        LOGE("frame probe could not allocate GLES framebuffer objects");
+        if (color_buffer != 0) {
+            glDeleteRenderbuffers(1, &color_buffer);
+        }
+        if (framebuffer != 0) {
+            glDeleteFramebuffers(1, &framebuffer);
+        }
+        return;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, color_buffer);
+    glRenderbufferStorage(
+        GL_RENDERBUFFER,
+        GL_RGBA8,
+        engine->width,
+        engine->height
+    );
+    glFramebufferRenderbuffer(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        GL_RENDERBUFFER,
+        color_buffer
+    );
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        LOGE("frame probe framebuffer is incomplete");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
+        return;
+    }
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    draw_limit_set(
+        &engine->renderer,
+        engine->renderer_packet,
+        &engine->parameter_controls,
+        engine->camera.center_x,
+        engine->camera.center_y,
+        engine->camera.scale,
+        engine->width,
+        engine->height
+    );
+    glFinish();
+
     const int crop_y = engine->height * 10 / 100;
     const int crop_height = engine->height * 65 / 100;
     if (engine->width <= 0 || crop_height <= 0) {
@@ -230,6 +281,9 @@ static void write_frame_probe(struct engine *engine) {
         (size_t)engine->width * (size_t)crop_height;
     if (pixel_count > SIZE_MAX / 4 || pixel_count > SIZE_MAX / 3) {
         LOGE("frame probe dimensions overflow");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -239,6 +293,9 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe allocation failed for %zu pixels", pixel_count);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -257,6 +314,9 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe glReadPixels failed: 0x%x", read_error);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -300,6 +360,9 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe path is too long");
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -308,6 +371,9 @@ static void write_frame_probe(struct engine *engine) {
         LOGE("frame probe could not open output file");
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -320,6 +386,9 @@ static void write_frame_probe(struct engine *engine) {
         remove(temporary_path);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -328,6 +397,9 @@ static void write_frame_probe(struct engine *engine) {
         remove(temporary_path);
         free(rgb);
         free(rgba);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &color_buffer);
+        glDeleteFramebuffers(1, &framebuffer);
         return;
     }
 
@@ -342,6 +414,10 @@ static void write_frame_probe(struct engine *engine) {
 
     free(rgb);
     free(rgba);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteRenderbuffers(1, &color_buffer);
+    glDeleteFramebuffers(1, &framebuffer);
+    glViewport(0, 0, engine->width, engine->height);
 #else
     (void)engine;
 #endif
