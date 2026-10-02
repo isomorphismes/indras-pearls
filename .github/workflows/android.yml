@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate embedded shader source boundaries
+        run: python3 tests/shader_source_test.py android/app/src/main/cpp/limit_set_renderer.c
+
       - name: Build and run deterministic host mathematics tests
         run: |
           cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
