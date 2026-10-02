@@ -232,6 +232,75 @@ static void terminate_display(struct engine *engine) {
     engine->height = 0;
 }
 
+static void probe_original_frame(struct engine *engine) {
+#ifndef NDEBUG
+    if (engine->width <= 0 || engine->height <= 0) {
+        return;
+    }
+
+    const size_t width = (size_t)engine->width;
+    const size_t height = (size_t)engine->height;
+    if (width > SIZE_MAX / height) {
+        LOGE("original GPU probe dimensions overflow");
+        return;
+    }
+    const size_t pixel_count = width * height;
+    if (pixel_count == 0 || pixel_count > SIZE_MAX / 4u) {
+        LOGE("original GPU probe pixel count overflow");
+        return;
+    }
+
+    uint8_t *rgba = malloc(pixel_count * 4u);
+    if (rgba == NULL) {
+        LOGE("original GPU probe allocation failed");
+        return;
+    }
+
+    glFinish();
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(
+        0, 0, engine->width, engine->height,
+        GL_RGBA, GL_UNSIGNED_BYTE, rgba
+    );
+    const GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        LOGE("original GPU probe glReadPixels failed: 0x%x", error);
+        free(rgba);
+        return;
+    }
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    size_t dark_pixels = 0;
+    size_t bright_pixels = 0;
+    for (size_t pixel = 0; pixel < pixel_count; ++pixel) {
+        const size_t offset = pixel * 4u;
+        const unsigned r = rgba[offset];
+        const unsigned g = rgba[offset + 1u];
+        const unsigned b = rgba[offset + 2u];
+        hash ^= r; hash *= UINT64_C(1099511628211);
+        hash ^= g; hash *= UINT64_C(1099511628211);
+        hash ^= b; hash *= UINT64_C(1099511628211);
+        if (r < 32u && g < 32u && b < 32u) {
+            ++dark_pixels;
+        }
+        if (r > 223u && g > 223u && b > 223u) {
+            ++bright_pixels;
+        }
+    }
+
+    LOGI(
+        "original GPU frame probe rgbhash=%016llx dark=%zu bright=%zu pixels=%zu",
+        (unsigned long long)hash,
+        dark_pixels,
+        bright_pixels,
+        pixel_count
+    );
+    free(rgba);
+#else
+    (void)engine;
+#endif
+}
+
 static void draw_frame(struct engine *engine) {
     if (engine->display == EGL_NO_DISPLAY || engine->surface == EGL_NO_SURFACE) {
         return;
@@ -251,6 +320,7 @@ static void draw_frame(struct engine *engine) {
     }
 
     draw_original_texture(&engine->renderer);
+    probe_original_frame(engine);
 
     if (!eglSwapBuffers(engine->display, engine->surface)) {
         LOGE("eglSwapBuffers failed: 0x%x", eglGetError());
