@@ -80,6 +80,19 @@ static bool refresh_schottky_renderer_packet(struct engine *engine) {
         return false;
     }
 
+    double packet_weighted_sum = 0.0;
+    double packet_energy = 0.0;
+    for (int index = 0; index < RENDERER_PACKET_FLOAT_COUNT; ++index) {
+        const double value = (double)engine->renderer_packet[index];
+        packet_weighted_sum += (double)(index + 1) * value;
+        packet_energy += value * value;
+    }
+    LOGI(
+        "Schottky packet metric weighted=%.9f energy=%.9f",
+        packet_weighted_sum,
+        packet_energy
+    );
+
     LOGI(
         "Schottky controls u0=(%.4f,%.4f) u1=(%.4f,%.4f) u2=(%.4f,%.4f)",
         (double)controls_cartesian[0],
