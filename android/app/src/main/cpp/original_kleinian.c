@@ -11,7 +11,6 @@
 #include <math.h>
 #endif
 
-#include <string.h>
 
 typedef struct original_kleinian_complex C;
 typedef struct original_kleinian_matrix2 M;
@@ -586,7 +585,9 @@ bool original_kleinian_rasterize_rgba(
         return false;
     }
 
-    memset(rgba, 255, pixels * 4u);
+    for (size_t byte = 0; byte < pixels * 4u; ++byte) {
+        rgba[byte] = 255;
+    }
     for (size_t i = 0; i < point_count; ++i) {
         size_t x;
         size_t y;
