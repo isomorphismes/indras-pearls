@@ -36,7 +36,27 @@ void complex_parameter_control_center(
 
 void initialize_complex_parameter_controls(struct complex_parameter_controls *controls) {
     memset(controls, 0, sizeof(*controls));
+    controls->value[0].real = 0.94f;
     controls->active_index = -1;
+}
+
+float schottky_radius_from_controls(const struct complex_parameter_controls *controls) {
+    const float control_extent = 0.94f;
+    const float minimum_radius = 0.10f;
+    const float maximum_radius = 0.70f;
+    float value = controls == NULL ? control_extent : controls->value[0].real;
+
+    if (value < -control_extent) {
+        value = -control_extent;
+    }
+    if (value > control_extent) {
+        value = control_extent;
+    }
+
+    const float unit_interval =
+        (value + control_extent) / (2.0f * control_extent);
+    return minimum_radius +
+        unit_interval * (maximum_radius - minimum_radius);
 }
 
 static void set_control_from_input(
@@ -56,20 +76,20 @@ static void set_control_from_input(
 
     complex_parameter_control_center(index, width, height, &center_x, &center_y);
 
-    float framebuffer_y = (float)height - input_y;
+    (void)input_y;
+    (void)center_y;
     float real = (input_x - center_x) / radius;
-    float imaginary = (framebuffer_y - center_y) / radius;
-    float magnitude_squared = real * real + imaginary * imaginary;
     const float maximum_radius = 0.94f;
 
-    if (magnitude_squared > maximum_radius * maximum_radius) {
-        float magnitude = sqrtf(magnitude_squared);
-        real *= maximum_radius / magnitude;
-        imaginary *= maximum_radius / magnitude;
+    if (real < -maximum_radius) {
+        real = -maximum_radius;
+    }
+    if (real > maximum_radius) {
+        real = maximum_radius;
     }
 
     controls->value[index].real = real;
-    controls->value[index].imaginary = imaginary;
+    controls->value[index].imaginary = 0.0f;
 }
 
 bool begin_complex_parameter_drag(

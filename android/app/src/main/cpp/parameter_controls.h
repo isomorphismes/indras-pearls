@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#define COMPLEX_PARAMETER_COUNT 3
+#define COMPLEX_PARAMETER_COUNT 1
 
 struct complex_value {
     float real;
@@ -16,6 +16,7 @@ struct complex_parameter_controls {
 };
 
 void initialize_complex_parameter_controls(struct complex_parameter_controls *controls);
+float schottky_radius_from_controls(const struct complex_parameter_controls *controls);
 float complex_parameter_control_radius(int width, int height);
 void complex_parameter_control_center(
     int index,

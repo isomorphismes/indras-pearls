@@ -49,3 +49,26 @@ Android NDK r29 Clang/lld perform the final shared-library link with
 Only an ordinary `float` radius, integer status, and flat float array cross
 between ICK-compiled code and NDK-compiled code. No C aggregate or compiler
 private complex representation crosses that boundary.
+
+
+## Live control and emulator acceptance
+
+The live-control host test exercises the actual touch-coordinate state machine,
+maps the horizontal handle to the classical-family radius, rebuilds two renderer
+packets, and requires the packet to change:
+
+```text
+cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp \
+  android/app/src/main/cpp/mobius_math.c \
+  android/app/src/main/cpp/renderer_packet.c \
+  android/app/src/main/cpp/parameter_controls.c \
+  tests/control_packet_test.c -lm -o /tmp/indras-pearls-control-test
+/tmp/indras-pearls-control-test
+```
+
+CI then runs the built APK in an Android x86-64 emulator (QEMU), captures a
+baseline at `r = 0.7`, performs an ADB drag on the live control to approximately
+`r = 0.4`, and captures a second frame. It requires both a native log receipt
+for the new radius and a nontrivial pixel difference in the lower 65% of the
+screen. That crop excludes the control itself, so handle motion alone cannot
+satisfy the renderer test.

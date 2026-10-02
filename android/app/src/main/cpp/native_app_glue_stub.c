@@ -48,6 +48,20 @@ struct engine {
 
 static void terminate_display(struct engine *engine);
 
+static bool refresh_schottky_renderer_packet(struct engine *engine) {
+    const float radius = schottky_radius_from_controls(&engine->parameter_controls);
+    const int status =
+        symmetric_classical_renderer_packet(radius, engine->renderer_packet);
+    if (status != RENDERER_PACKET_OK) {
+        LOGE("Schottky radius control rejected r=%.6f with status %d",
+             (double)radius, status);
+        return false;
+    }
+
+    LOGI("Schottky radius control r=%.6f", (double)radius);
+    return true;
+}
+
 static float pointer_span(const AInputEvent *event) {
     if (AMotionEvent_getPointerCount(event) < 2) {
         return 0.0f;
@@ -218,7 +232,9 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
                 )) {
                 engine->dragging = false;
                 engine->pinching = false;
-                engine->dirty = true;
+                if (refresh_schottky_renderer_packet(engine)) {
+                    engine->dirty = true;
+                }
                 return 1;
             }
 
@@ -249,7 +265,9 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
                         engine->width,
                         engine->height
                     )) {
-                    engine->dirty = true;
+                    if (refresh_schottky_renderer_packet(engine)) {
+                        engine->dirty = true;
+                    }
                 }
                 return 1;
             }
@@ -351,13 +369,10 @@ void android_main(struct android_app *app) {
     engine.camera.center_x = 0.0f;
     engine.camera.center_y = 0.0f;
     engine.camera.scale = 4.0f;
-    const int packet_status =
-        symmetric_classical_renderer_packet(0.7f, engine.renderer_packet);
-    if (packet_status != RENDERER_PACKET_OK) {
-        LOGE("could not construct bundled Schottky renderer packet: %d", packet_status);
+    initialize_complex_parameter_controls(&engine.parameter_controls);
+    if (!refresh_schottky_renderer_packet(&engine)) {
         return;
     }
-    initialize_complex_parameter_controls(&engine.parameter_controls);
     engine.dirty = true;
 
     app->userData = &engine;

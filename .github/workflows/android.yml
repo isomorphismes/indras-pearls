@@ -22,6 +22,9 @@ jobs:
           cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
           /tmp/indras-pearls-mobius-math-test
 
+          cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c android/app/src/main/cpp/parameter_controls.c tests/control_packet_test.c -lm -o /tmp/indras-pearls-control-test
+          /tmp/indras-pearls-control-test
+
   android:
     runs-on: ubuntu-latest
     steps:
@@ -143,3 +146,115 @@ jobs:
           "$llvm_bin/llvm-nm" -D --defined-only /tmp/libindras-ick-packet.so \
             > /tmp/ick-packet.exports
           grep -q 'indras_ick_renderer_packet_probe' /tmp/ick-packet.exports
+
+
+  qemu-control-render:
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Download exact APK from this workflow
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: indras-pearls-touch-stub
+          path: qemu-apk
+
+      - name: Install image comparison utility
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Enable KVM access when available
+        run: |
+          set -eux
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+              | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            ls -l /dev/kvm
+          else
+            echo 'No /dev/kvm; emulator runner will use its available fallback.'
+          fi
+
+      - name: Prove radius control changes the rendered picture in QEMU
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            set -eu
+            mkdir -p qemu-control
+            apk="$(find qemu-apk -name app-debug.apk -print -quit)"
+            test -n "$apk"
+            adb install -r "$apk"
+            adb shell am force-stop org.isomorphisms.indraspearls
+            adb shell am start -W -n org.isomorphisms.indraspearls/android.app.NativeActivity
+            sleep 3
+
+            adb exec-out screencap -p > qemu-control/before.png
+
+            size_line="$(adb shell wm size | tr -d '\r' | tail -n 1)"
+            size="${size_line##*: }"
+            width="${size%x*}"
+            height="${size#*x}"
+            test "$width" -gt 0
+            test "$height" -gt 0
+
+            by_width=$((width / 8))
+            by_height=$((height / 12))
+            if [ "$by_width" -lt "$by_height" ]; then
+              control_radius="$by_width"
+            else
+              control_radius="$by_height"
+            fi
+
+            center_x=$((width / 2))
+            control_y=$((145 * control_radius / 100))
+            start_x=$((center_x + 94 * control_radius / 100))
+            end_x="$center_x"
+
+            adb logcat -c
+            adb shell input swipe "$start_x" "$control_y" "$end_x" "$control_y" 600
+            sleep 2
+            adb exec-out screencap -p > qemu-control/after.png
+            adb logcat -d > qemu-control/logcat.txt
+
+            grep -E 'IndrasPearls.*Schottky radius control r=0\.400' qemu-control/logcat.txt
+
+            crop_y=$((height * 25 / 100))
+            crop_h=$((height * 65 / 100))
+            convert qemu-control/before.png \
+              -crop "${width}x${crop_h}+0+${crop_y}" +repage \
+              qemu-control/before-fractal.png
+            convert qemu-control/after.png \
+              -crop "${width}x${crop_h}+0+${crop_y}" +repage \
+              qemu-control/after-fractal.png
+
+            compare_status=0
+            if changed_pixels="$(compare -metric AE -fuzz 2% \
+                qemu-control/before-fractal.png \
+                qemu-control/after-fractal.png null: 2>&1)"; then
+              compare_status=0
+            else
+              compare_status=$?
+            fi
+            test "$compare_status" -eq 1
+            case "$changed_pixels" in
+              ''|*[!0-9]*) echo "unexpected AE metric: $changed_pixels" >&2; exit 1 ;;
+            esac
+
+            minimum_changed=$((width * crop_h / 1000))
+            echo "changed_pixels=$changed_pixels minimum_required=$minimum_changed"
+            test "$changed_pixels" -gt "$minimum_changed"
+
+      - name: Retain QEMU before/after evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-qemu-control-${{ github.run_id }}
+          path: qemu-control/
+          if-no-files-found: error

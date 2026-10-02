@@ -24,11 +24,12 @@ private complex representations stay on the producer side. CI proves an
 units and Android NDK r29 Clang/lld performs the final Android shared-library
 link.
 
-The three disk controls remain an independent UI experiment. Each disk stores
-one complex value directly as its horizontal and vertical handle position,
-clamped to radius `0.94`. They do **not** yet map into the Schottky group.
-That keeps the parameter-chart decision separate from the now-working
-mathematics-to-renderer path.
+The old three-disk UI experiment has been reduced to one live control for the
+validated one-real-parameter family. Its horizontal handle coordinate is clamped
+to `[-0.94, 0.94]` and mapped affinely to `0.10 <= r <= 0.70`. The default
+handle is at the right edge, reproducing the bundled `r = 0.7` picture.
+Dragging the handle regenerates the validated renderer packet; the vertical
+coordinate is intentionally not a second Schottky parameter.
 
 The renderer remains an independent native implementation. `philogb.md` and
 `notes/webgpu.md` are reference notes about Nico Belmonte's public
@@ -51,13 +52,13 @@ The APK is written under `android/app/build/outputs/apk/debug/`.
 
 ## Touch contract
 
-- drag inside one of the three disks: move that complex parameter handle;
-- one finger outside the disks: pan the complex plane;
-- two fingers outside the disks: zoom;
-- lift: leave both camera and parameter values where they are.
+- drag inside the radius control: move the `r` handle horizontally and rebuild the Schottky packet;
+- one finger outside the control: pan the complex plane;
+- two fingers outside the control: zoom;
+- lift: leave both camera and radius where they are.
 
-A parameter drag captures that gesture so it does not accidentally pan or
-pinch the limit-set view.
+A radius drag captures that gesture so it does not accidentally pan or pinch
+the limit-set view.
 
 ## Current renderer boundary
 
@@ -67,8 +68,11 @@ pinch the limit-set view.
 - four independent circle centers and radius-squared values uploaded as uniforms;
 - four exit maps uploaded as ordinary complex coefficient arrays;
 - bounded 24-step circle classification / Möbius iteration;
-- three analytic disk controls drawn in the same fragment pass;
-- event-driven redraws when camera, controls, or window state changes.
+- one analytic radius control drawn in the same fragment pass;
+- every radius change reconstructs and validates the group before replacing the renderer packet;
+- event-driven redraws when camera, radius, or window state changes.
 
-The next parameter step is to let a chosen control mode request a new validated
-group and packet rather than editing renderer coefficients directly.
+CI launches the APK in the Android emulator/QEMU path, drags the live radius
+control from the bundled `r = 0.7` position toward `r = 0.4`, verifies the
+parameter log receipt, and compares a lower-screen crop that excludes the
+control chrome. The test therefore requires the fractal itself to change.

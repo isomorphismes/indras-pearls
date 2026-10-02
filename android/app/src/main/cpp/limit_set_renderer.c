@@ -23,7 +23,7 @@ static const char *fragment_shader_source =
     "precision highp float;\n"
     "\n"
     "const int REGION_COUNT = 4;\n"
-    "const int PARAMETER_COUNT = 3;\n"
+    "const int PARAMETER_COUNT = 1;\n"
     "const int MAX_STEPS = 24;\n"
     "\n"
     "uniform vec2 u_center;\n"
