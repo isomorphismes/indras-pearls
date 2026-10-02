@@ -23,6 +23,7 @@ struct limit_set_renderer {
     GLint parameter_value_location;
     GLint parameter_radius_location;
     GLint active_parameter_location;
+    GLint initial_region_location;
 };
 
 bool initialize_limit_set_renderer(struct limit_set_renderer *renderer);
