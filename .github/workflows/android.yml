@@ -146,7 +146,7 @@ jobs:
         with:
           gradle-version: "8.13"
 
-      - name: Compile Schottky production objects with ICK
+      - name: Compile original Kleinian production core with ICK
         run: |
           set -euxo pipefail
           mkdir -p build/ick/armeabi-v7a
@@ -156,25 +156,18 @@ jobs:
 
           "$ick" "${flags[@]}" -std=c11 -O2 -fPIC -ffreestanding \
             -DINDRAS_FREESTANDING_MATH "${include[@]}" \
-            -c android/app/src/main/cpp/mobius_math.c \
-            -o build/ick/armeabi-v7a/mobius_math.o
-          "$ick" "${flags[@]}" -std=c11 -O2 -fPIC -ffreestanding \
-            -DINDRAS_FREESTANDING_MATH "${include[@]}" \
-            -c android/app/src/main/cpp/renderer_packet.c \
-            -o build/ick/armeabi-v7a/renderer_packet.o
+            -c android/app/src/main/cpp/original_kleinian.c \
+            -o build/ick/armeabi-v7a/original_kleinian.o
 
-          arm-linux-gnueabi-readelf -A build/ick/armeabi-v7a/mobius_math.o \
-            | tee build/ick/armeabi-v7a/mobius_math.attributes
-          arm-linux-gnueabi-readelf -A build/ick/armeabi-v7a/renderer_packet.o \
-            | tee build/ick/armeabi-v7a/renderer_packet.attributes
-          for attributes in build/ick/armeabi-v7a/*.attributes; do
-            grep -q 'Tag_CPU_arch: v7' "$attributes"
-            grep -q 'Tag_THUMB_ISA_use: Thumb-2' "$attributes"
-            if grep -q 'Tag_ABI_VFP_args: VFP registers' "$attributes"; then
-              echo 'hard-float ABI is not Android armeabi-v7a' >&2
-              exit 1
-            fi
-          done
+          arm-linux-gnueabi-readelf -A build/ick/armeabi-v7a/original_kleinian.o \
+            | tee build/ick/armeabi-v7a/original_kleinian.attributes
+          grep -q 'Tag_CPU_arch: v7' build/ick/armeabi-v7a/original_kleinian.attributes
+          grep -q 'Tag_THUMB_ISA_use: Thumb-2' build/ick/armeabi-v7a/original_kleinian.attributes
+          if grep -q 'Tag_ABI_VFP_args: VFP registers' \
+            build/ick/armeabi-v7a/original_kleinian.attributes; then
+            echo 'hard-float ABI is not Android armeabi-v7a' >&2
+            exit 1
+          fi
 
       - name: Retain strict standalone ICK to NDK link probe
         run: |
@@ -185,29 +178,27 @@ jobs:
           include=(-I android/app/src/main/cpp)
 
           "$ndk_cc" -std=c11 -O2 -fPIC "${include[@]}" \
-            -c tests/renderer_packet_ndk_probe.c \
-            -o build/ick/armeabi-v7a/renderer_packet_ndk_probe.o
+            -c tests/original_kleinian_ndk_probe.c \
+            -o build/ick/armeabi-v7a/original_kleinian_ndk_probe.o
           "$ndk_cc" -shared -Wl,-z,defs -Wl,-z,text -Wl,--fatal-warnings \
-            build/ick/armeabi-v7a/mobius_math.o \
-            build/ick/armeabi-v7a/renderer_packet.o \
-            build/ick/armeabi-v7a/renderer_packet_ndk_probe.o \
-            -lm -o build/ick/armeabi-v7a/libindras-ick-packet.so
+            build/ick/armeabi-v7a/original_kleinian.o \
+            build/ick/armeabi-v7a/original_kleinian_ndk_probe.o \
+            -lm -o build/ick/armeabi-v7a/libindras-original-kleinian.so
 
-          "$llvm_bin/llvm-readelf" -h build/ick/armeabi-v7a/libindras-ick-packet.so \
-            | tee build/ick/armeabi-v7a/ick-packet.elf
-          grep -q 'Class:.*ELF32' build/ick/armeabi-v7a/ick-packet.elf
-          grep -q 'Machine:.*ARM' build/ick/armeabi-v7a/ick-packet.elf
+          "$llvm_bin/llvm-readelf" -h build/ick/armeabi-v7a/libindras-original-kleinian.so \
+            | tee build/ick/armeabi-v7a/ick-original.elf
+          grep -q 'Class:.*ELF32' build/ick/armeabi-v7a/ick-original.elf
+          grep -q 'Machine:.*ARM' build/ick/armeabi-v7a/ick-original.elf
           "$llvm_bin/llvm-nm" -D --defined-only \
-            build/ick/armeabi-v7a/libindras-ick-packet.so \
-            | grep -q 'indras_ick_renderer_packet_probe'
+            build/ick/armeabi-v7a/libindras-original-kleinian.so \
+            | grep -q 'indras_original_kleinian_ndk_probe'
 
-      - name: Build actual ARMv7 APK with ICK production objects
+      - name: Build actual ARMv7 APK with ICK production core
         run: |
           set -euxo pipefail
           gradle --no-daemon :android:app:assembleDebug \
             -PickArmv7=true \
-            -PickMobiusObject="$GITHUB_WORKSPACE/build/ick/armeabi-v7a/mobius_math.o" \
-            -PickRendererPacketObject="$GITHUB_WORKSPACE/build/ick/armeabi-v7a/renderer_packet.o"
+            -PickOriginalKleinianObject="$GITHUB_WORKSPACE/build/ick/armeabi-v7a/original_kleinian.o"
           cp android/app/build/outputs/apk/debug/app-debug.apk \
             build/indras-pearls-ick-armeabi-v7a-debug.apk
 
@@ -233,7 +224,7 @@ jobs:
           "$llvm_bin/llvm-nm" -D --defined-only \
             build/ick/armeabi-v7a/libindras_pearls-packaged.so \
             | tee build/ick/armeabi-v7a/packaged.exports
-          grep -q 'symmetric_classical_renderer_packet' \
+          grep -q 'original_kleinian_generate_points_from_traces' \
             build/ick/armeabi-v7a/packaged.exports
 
           printf '%s\n' "$ICK_COMMIT" > build/ick-source-commit.txt
