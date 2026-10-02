@@ -30,7 +30,7 @@ static const char *fragment_shader_source =
     "uniform float u_scale;\n"
     "uniform vec2 u_resolution;\n"
     "uniform vec2 u_circle_center[REGION_COUNT];\n"
-    "uniform float u_circle_radius_squared;\n"
+    "uniform float u_circle_radius_squared[REGION_COUNT];\n"
     "uniform vec2 u_a[REGION_COUNT];\n"
     "uniform vec2 u_b[REGION_COUNT];\n"
     "uniform vec2 u_c[REGION_COUNT];\n"
@@ -69,7 +69,7 @@ static const char *fragment_shader_source =
     "int containing_region(vec2 z) {\n"
     "    for (int region = 0; region < REGION_COUNT; ++region) {\n"
     "        vec2 offset = z - u_circle_center[region];\n"
-    "        if (dot(offset, offset) < u_circle_radius_squared) {\n"
+    "        if (dot(offset, offset) < u_circle_radius_squared[region]) {\n"
     "            return region;\n"
     "        }\n"
     "    }\n"
@@ -178,7 +178,7 @@ static bool find_uniforms(struct limit_set_renderer *renderer) {
     renderer->scale_location = glGetUniformLocation(renderer->program, "u_scale");
     renderer->resolution_location = glGetUniformLocation(renderer->program, "u_resolution");
     renderer->circle_center_location = glGetUniformLocation(renderer->program, "u_circle_center[0]");
-    renderer->circle_radius_squared_location = glGetUniformLocation(renderer->program, "u_circle_radius_squared");
+    renderer->circle_radius_squared_location = glGetUniformLocation(renderer->program, "u_circle_radius_squared[0]");
     renderer->a_location = glGetUniformLocation(renderer->program, "u_a[0]");
     renderer->b_location = glGetUniformLocation(renderer->program, "u_b[0]");
     renderer->c_location = glGetUniformLocation(renderer->program, "u_c[0]");
@@ -269,35 +269,6 @@ void terminate_limit_set_renderer(struct limit_set_renderer *renderer) {
     memset(renderer, 0, sizeof(*renderer));
 }
 
-static void copy_complex_values(
-    float output[LIMIT_SET_REGION_COUNT * 2],
-    const struct complex_value input[LIMIT_SET_REGION_COUNT]
-) {
-    for (int i = 0; i < LIMIT_SET_REGION_COUNT; ++i) {
-        output[i * 2] = input[i].real;
-        output[i * 2 + 1] = input[i].imaginary;
-    }
-}
-
-static void copy_mobius_coefficients(
-    float a[LIMIT_SET_REGION_COUNT * 2],
-    float b[LIMIT_SET_REGION_COUNT * 2],
-    float c[LIMIT_SET_REGION_COUNT * 2],
-    float d[LIMIT_SET_REGION_COUNT * 2],
-    const struct mobius_map maps[LIMIT_SET_REGION_COUNT]
-) {
-    for (int i = 0; i < LIMIT_SET_REGION_COUNT; ++i) {
-        a[i * 2] = maps[i].a.real;
-        a[i * 2 + 1] = maps[i].a.imaginary;
-        b[i * 2] = maps[i].b.real;
-        b[i * 2 + 1] = maps[i].b.imaginary;
-        c[i * 2] = maps[i].c.real;
-        c[i * 2 + 1] = maps[i].c.imaginary;
-        d[i * 2] = maps[i].d.real;
-        d[i * 2 + 1] = maps[i].d.imaginary;
-    }
-}
-
 static void copy_parameter_controls(
     float centers[COMPLEX_PARAMETER_COUNT * 2],
     float values[COMPLEX_PARAMETER_COUNT * 2],
@@ -320,7 +291,7 @@ static void copy_parameter_controls(
 
 void draw_limit_set(
     const struct limit_set_renderer *renderer,
-    const struct limit_set_group *group,
+    const float renderer_packet[static RENDERER_PACKET_FLOAT_COUNT],
     const struct complex_parameter_controls *controls,
     float center_x,
     float center_y,
@@ -328,16 +299,9 @@ void draw_limit_set(
     int width,
     int height
 ) {
-    float circle_centers[LIMIT_SET_REGION_COUNT * 2];
-    float a[LIMIT_SET_REGION_COUNT * 2];
-    float b[LIMIT_SET_REGION_COUNT * 2];
-    float c[LIMIT_SET_REGION_COUNT * 2];
-    float d[LIMIT_SET_REGION_COUNT * 2];
     float parameter_centers[COMPLEX_PARAMETER_COUNT * 2];
     float parameter_values[COMPLEX_PARAMETER_COUNT * 2];
 
-    copy_complex_values(circle_centers, group->circle_center);
-    copy_mobius_coefficients(a, b, c, d, group->exit_map);
     copy_parameter_controls(parameter_centers, parameter_values, controls, width, height);
 
     glViewport(0, 0, width, height);
@@ -347,15 +311,36 @@ void draw_limit_set(
     glUniform2f(renderer->center_location, center_x, center_y);
     glUniform1f(renderer->scale_location, scale);
     glUniform2f(renderer->resolution_location, (float)width, (float)height);
-    glUniform2fv(renderer->circle_center_location, LIMIT_SET_REGION_COUNT, circle_centers);
-    glUniform1f(
-        renderer->circle_radius_squared_location,
-        group->circle_radius * group->circle_radius
+    glUniform2fv(
+        renderer->circle_center_location,
+        LIMIT_SET_REGION_COUNT,
+        renderer_packet + RENDERER_PACKET_CIRCLE_CENTER_OFFSET
     );
-    glUniform2fv(renderer->a_location, LIMIT_SET_REGION_COUNT, a);
-    glUniform2fv(renderer->b_location, LIMIT_SET_REGION_COUNT, b);
-    glUniform2fv(renderer->c_location, LIMIT_SET_REGION_COUNT, c);
-    glUniform2fv(renderer->d_location, LIMIT_SET_REGION_COUNT, d);
+    glUniform1fv(
+        renderer->circle_radius_squared_location,
+        LIMIT_SET_REGION_COUNT,
+        renderer_packet + RENDERER_PACKET_CIRCLE_RADIUS_SQUARED_OFFSET
+    );
+    glUniform2fv(
+        renderer->a_location,
+        LIMIT_SET_REGION_COUNT,
+        renderer_packet + RENDERER_PACKET_A_OFFSET
+    );
+    glUniform2fv(
+        renderer->b_location,
+        LIMIT_SET_REGION_COUNT,
+        renderer_packet + RENDERER_PACKET_B_OFFSET
+    );
+    glUniform2fv(
+        renderer->c_location,
+        LIMIT_SET_REGION_COUNT,
+        renderer_packet + RENDERER_PACKET_C_OFFSET
+    );
+    glUniform2fv(
+        renderer->d_location,
+        LIMIT_SET_REGION_COUNT,
+        renderer_packet + RENDERER_PACKET_D_OFFSET
+    );
     glUniform2fv(
         renderer->parameter_center_location,
         COMPLEX_PARAMETER_COUNT,
