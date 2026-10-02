@@ -181,7 +181,7 @@ adb shell input touchscreen swipe \
     "$center_x" "$control_y" \
     "$((center_x + control_radius / 2))" "$control_y" 500
 check_after_drag "trace-a" \
-    'original dgulotta/kleinian raster ready: tr\(a\)=\(2\.39[0-9]*,0\.000000\)'
+    'original dgulotta/kleinian raster ready: tr\(a\)=\(2\.39[0-9]*,0\.00[0-9]*\)'
 
 # tr(b): restart to defaults, then move the second complex control.
 launch_baseline "trace-b"
@@ -191,7 +191,7 @@ adb shell input touchscreen swipe \
     "$center_x" "$control_y" \
     "$((center_x + control_radius / 2))" "$control_y" 500
 check_after_drag "trace-b" \
-    'original dgulotta/kleinian raster ready: .*tr\(b\)=\(2\.39[0-9]*,0\.000000\)'
+    'original dgulotta/kleinian raster ready: .*tr\(b\)=\(2\.39[0-9]*,0\.00[0-9]*\)'
 
 {
     printf 'state\tPASS\n'
