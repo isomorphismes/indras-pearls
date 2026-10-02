@@ -320,6 +320,23 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             return 1;
 
         case AMOTION_EVENT_ACTION_UP:
+            if (engine->parameter_controls.active_index >= 0 &&
+                pointer_count >= 1 &&
+                update_complex_parameter_drag(
+                    &engine->parameter_controls,
+                    AMotionEvent_getX(event, 0),
+                    AMotionEvent_getY(event, 0),
+                    engine->width,
+                    engine->height
+                )) {
+                refresh_schottky_renderer_packet(engine);
+            }
+            end_complex_parameter_drag(&engine->parameter_controls);
+            engine->dragging = false;
+            engine->pinching = false;
+            engine->dirty = true;
+            return 1;
+
         case AMOTION_EVENT_ACTION_CANCEL:
             end_complex_parameter_drag(&engine->parameter_controls);
             engine->dragging = false;
