@@ -33,6 +33,12 @@ jobs:
           path: _ick
           submodules: true
 
+      - name: Install ARMv7 assembler/linker
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-arm-linux-gnueabi
+
       - name: Restore ARMv7 ICK compiler cache
         id: ick-cache
         uses: actions/cache/restore@v4
