@@ -19,7 +19,7 @@ static int store_complex(
 
 int symmetric_classical_renderer_packet(
     float radius,
-    float output[static RENDERER_PACKET_FLOAT_COUNT]
+    float output[RENDERER_PACKET_FLOAT_COUNT]
 ) {
     if (output == 0 || !__builtin_isfinite(radius) || radius <= 0.0f) {
         return RENDERER_PACKET_INVALID_PARAMETER;
