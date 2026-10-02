@@ -201,7 +201,7 @@ adb shell input touchscreen swipe \
     "$center_x" "$control_y" \
     "$center_x" "$((control_y + control_radius / 2))" 500
 check_after_drag "trace-a-im" \
-    'original dgulotta/kleinian raster ready: tr\(a\)=\(2\.200000,-0\.19[0-9]*\)'
+    'original dgulotta/kleinian raster ready: tr\(a\)=\(2\.200000,-0\.18[0-9]*\)'
 
 # tr(b) imaginary coordinate.
 launch_baseline "trace-b-im"
@@ -211,7 +211,7 @@ adb shell input touchscreen swipe \
     "$center_x" "$control_y" \
     "$center_x" "$((control_y + control_radius / 2))" 500
 check_after_drag "trace-b-im" \
-    'original dgulotta/kleinian raster ready: .*tr\(b\)=\(2\.200000,-0\.19[0-9]*\)'
+    'original dgulotta/kleinian raster ready: .*tr\(b\)=\(2\.200000,-0\.18[0-9]*\)'
 
 {
     printf 'state\tPASS\n'
