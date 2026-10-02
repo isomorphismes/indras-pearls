@@ -54,6 +54,21 @@ struct engine {
 
 static void terminate_display(struct engine *engine);
 
+static uint32_t renderer_packet_checksum(
+    const float packet[static RENDERER_PACKET_FLOAT_COUNT]
+) {
+    uint32_t hash = 2166136261u;
+    for (int index = 0; index < RENDERER_PACKET_FLOAT_COUNT; ++index) {
+        uint32_t bits = 0;
+        memcpy(&bits, &packet[index], sizeof(bits));
+        for (int byte = 0; byte < 4; ++byte) {
+            hash ^= (bits >> (byte * 8)) & 0xffu;
+            hash *= 16777619u;
+        }
+    }
+    return hash;
+}
+
 static bool refresh_schottky_renderer_packet(struct engine *engine) {
     float controls_cartesian[SCHOTTKY_PARAMETER_FLOAT_COUNT];
     complex_parameter_controls_flatten(
@@ -88,6 +103,10 @@ static bool refresh_schottky_renderer_packet(struct engine *engine) {
         (double)controls_cartesian[3],
         (double)controls_cartesian[4],
         (double)controls_cartesian[5]
+    );
+    LOGI(
+        "Schottky renderer packet fnv1a32=%08x",
+        renderer_packet_checksum(engine->renderer_packet)
     );
     return true;
 }
