@@ -19,6 +19,12 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
+#ifdef INDRAS_ICK_PRODUCER
+#define SCHOTTKY_PRODUCER_NAME "ICK C"
+#else
+#define SCHOTTKY_PRODUCER_NAME "Android NDK C"
+#endif
+
 struct camera {
     float center_x;
     float center_y;
@@ -357,6 +363,7 @@ void android_main(struct android_app *app) {
         LOGE("could not construct bundled Schottky renderer packet: %d", packet_status);
         return;
     }
+    LOGI("Schottky math producer: %s", SCHOTTKY_PRODUCER_NAME);
     initialize_complex_parameter_controls(&engine.parameter_controls);
     engine.dirty = true;
 
