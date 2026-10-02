@@ -39,13 +39,29 @@ deployment; they do not assert a license for his application code.
 Use JDK 17, Android SDK 36, NDK `29.0.14206865`, CMake 3.22.1, and Gradle
 8.13.
 
-```sh
+~~~sh
 gradle :android:app:assembleDebug
-```
+~~~
 
-The ordinary APK build may compile the C producer with NDK Clang. The separate
-CI boundary job recompiles the same producer sources with ICK C and proves that
-those objects link through the NDK Android boundary.
+An ICK-object ARMv7 build uses:
+
+~~~sh
+gradle :android:app:assembleDebug \
+  -PickArmv7=true \
+  -PickMobiusObject=/absolute/path/to/mobius_math.o \
+  -PickRendererPacketObject=/absolute/path/to/renderer_packet.o
+~~~
+
+The ordinary APK build compiles the C producer with NDK Clang for all supported
+ABIs. The ICK ARMv7 build mode instead accepts precompiled ICK objects for
+`mobius_math.c` and `renderer_packet.c`, restricts packaging to
+`armeabi-v7a`, and lets the same CMake/NDK link produce the actual application
+shared library and APK. The NativeActivity logs which producer supplied the
+Schottky mathematics.
+
+CI rebuilds the pinned ICK C compiler, compiles those two production translation
+units, runs the standalone strict-link probe, then builds and inspects the
+MIRO-targeted APK using the same ICK objects.
 
 The APK is written under `android/app/build/outputs/apk/debug/`.
 
