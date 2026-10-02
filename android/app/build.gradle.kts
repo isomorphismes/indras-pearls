@@ -12,15 +12,18 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "0.0.1"
+        versionName = "0.0.1-miro-a1"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("armeabi-v7a")
         }
 
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DANDROID_STL=none")
+                arguments += listOf(
+                    "-DANDROID_STL=none",
+                    "-DINDRAS_MIRO_A1=ON"
+                )
             }
         }
     }
