@@ -2,6 +2,14 @@ plugins {
     id("com.android.application")
 }
 
+val stableTestKeystorePath = providers.environmentVariable("INDRAS_TEST_KEYSTORE").orNull
+val stableTestKeystorePassword = providers.environmentVariable("INDRAS_TEST_KEYSTORE_PASSWORD").orNull
+    ?: "wegert-debug"
+val stableTestKeyPassword = providers.environmentVariable("INDRAS_TEST_KEY_PASSWORD").orNull
+    ?: stableTestKeystorePassword
+val stableTestKeyAlias = providers.environmentVariable("INDRAS_TEST_KEY_ALIAS").orNull
+    ?: "wegert-debug"
+
 val useIckArmv7 = providers.gradleProperty("ickArmv7")
     .map { it.toBoolean() }
     .orElse(false)
@@ -18,6 +26,18 @@ android {
     namespace = "org.isomorphisms.indraspearls"
     compileSdk = 36
     ndkVersion = "29.0.14206865"
+
+    signingConfigs {
+        stableTestKeystorePath?.let { keystorePath ->
+            create("stableTest") {
+                storeFile = rootProject.file(keystorePath)
+                storePassword = stableTestKeystorePassword
+                keyAlias = stableTestKeyAlias
+                keyPassword = stableTestKeyPassword
+                storeType = "pkcs12"
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "org.isomorphisms.indraspearls"
@@ -44,6 +64,13 @@ android {
                     )
                 }
             }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            // Never fall back to a runner-local debug certificate.
+            signingConfig = signingConfigs.findByName("stableTest")
         }
     }
 
