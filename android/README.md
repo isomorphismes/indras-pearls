@@ -1,90 +1,50 @@
-# Android native limit-set slice
+# Android original Kleinian renderer
 
-The Android path now has three deliberate layers:
+The current application renders the restored algorithm from
+`isomorphismes/kleinian-groups@117dc5f34353e98cfae2f12bf386db5862110d92`.
+`original_kleinian.c` builds the points and raster; `original_texture_renderer.c`
+uploads that raster to GLES. The historical circle/renderer-packet implementation
+remains available for its independent mathematics tests.
 
-1. the binary64 Schottky/Möbius mathematics core in plain C;
-2. a flat scalar renderer packet derived from a validated classical circle presentation;
-3. the NativeActivity/EGL/GLES renderer and touch UI.
+Two complex disk controls set the traces of the original generators:
 
-For the bundled view, the app constructs the symmetric classical family member
-at `r = 0.7`, derives its four isometric circles and four exit maps through
-`mobius_math.c`, and flattens that validated state through
-`renderer_packet.c`. The old hand-entered `group_state.c` copy is no longer
-the renderer's source of truth.
+- first disk: real and imaginary parts of `tr(a)`;
+- second disk: real and imaginary parts of `tr(b)`.
 
-The packet carries separate center and radius-squared values for all four
-circles plus the four complex coefficients of every exit map. The fragment
-shader therefore no longer assumes that all four circles share one radius.
+The default traces are both `2.2`. NativeActivity touch events update the control
+state, convert it to traces, regenerate the original raster, and upload the new
+texture. A captured parameter drag does not also move the camera. A gesture
+outside the controls retains the existing camera behavior.
 
-The packet boundary is intentionally friendly to both ICK C and the Android
-NDK. Its externally visible construction call uses an ordinary `float`
-parameter, integer status, and a flat float array. C aggregates and compiler
-private complex representations stay on the producer side. CI proves an
-`armeabi-v7a` path in which ICK C compiles the Möbius and packet translation
-units and Android NDK r29 Clang/lld performs the final Android shared-library
-link.
+## Build and signing boundaries
 
-The three disk controls remain an independent UI experiment. Each disk stores
-one complex value directly as its horizontal and vertical handle position,
-clamped to radius `0.94`. They do **not** yet map into the Schottky group.
-That keeps the parameter-chart decision separate from the now-working
-mathematics-to-renderer path.
+The ARMv7 production-core stage uses ICK C at
+`ea034a574097e81d1027660b39c3e1c185d11b80`, with Thumb instructions and the
+Android softfp calling convention. Android NDK `29.0.14206865` compiles the
+platform/control glue and links the ICK object against Android/EGL/GLES/Bionic.
+The emulator and host-test C stages currently use that NDK. Gradle packages the
+existing native application; no application Java/Kotlin or DEX is introduced.
 
-The renderer remains an independent native implementation. `philogb.md` and
-`notes/webgpu.md` are reference notes about Nico Belmonte's public
-deployment; they do not assert a license for his application code.
+The ICK qualification on this branch covers the freestanding ARMv7 mathematics
+object. Qualification of the Android platform glue, final platform link, and
+x86_64 emulator/host stages through ICK remains absent. Those stages currently
+use NDK; this is a qualification gap, not proof that ICK cannot implement them.
 
-## Build
+Installable test artifacts use the existing public Wegert test signer at
+`isomorphismes/wegert@89dcfb840cec1a66ee04c7f7404954cbd6c09839`.
+The central ai-ci finished-APK gate checks the registered package and certificate
+after packaging. No missing-key generation or runner-local debug identity is
+permitted. Test signing does not authorize a production/store release.
 
-Use JDK 17, Android SDK 36, NDK `29.0.14206865`, CMake 3.22.1, and Gradle
-8.13.
+## Acceptance
 
-~~~sh
-gradle :android:app:assembleDebug
-~~~
+`tests/qemu-original-raster.sh` requires nontrivial GPU and decoded display
+content. `tests/qemu-original-trace-controls.sh` drives Android touchscreen
+gestures for all four trace coordinates. Each coordinate must change the
+mathematical raster, GPU RGB hash, and a decoded RGB display crop that excludes
+the controls and navigation chrome. AE and normalized RMSE thresholds reject
+incidental pixel changes; PNG file-byte differences are not the visual oracle.
 
-An ICK-object ARMv7 build uses:
-
-~~~sh
-gradle :android:app:assembleDebug \
-  -PickArmv7=true \
-  -PickMobiusObject=/absolute/path/to/mobius_math.o \
-  -PickRendererPacketObject=/absolute/path/to/renderer_packet.o
-~~~
-
-The ordinary APK build compiles the C producer with NDK Clang for all supported
-ABIs. The ICK ARMv7 build mode instead accepts precompiled ICK objects for
-`mobius_math.c` and `renderer_packet.c`, restricts packaging to
-`armeabi-v7a`, and lets the same CMake/NDK link produce the actual application
-shared library and APK. The NativeActivity logs which producer supplied the
-Schottky mathematics.
-
-CI rebuilds the pinned ICK C compiler, compiles those two production translation
-units, runs the standalone strict-link probe, then builds and inspects the
-MIRO-targeted APK using the same ICK objects.
-
-The APK is written under `android/app/build/outputs/apk/debug/`.
-
-## Touch contract
-
-- drag inside one of the three disks: move that complex parameter handle;
-- one finger outside the disks: pan the complex plane;
-- two fingers outside the disks: zoom;
-- lift: leave both camera and parameter values where they are.
-
-A parameter drag captures that gesture so it does not accidentally pan or
-pinch the limit-set view.
-
-## Current renderer boundary
-
-- one full-screen triangle; no CPU-side fractal point cloud or mesh;
-- GLES 3 fragment shader with 32-bit complex arithmetic;
-- validated binary64 group construction before narrowing to renderer floats;
-- four independent circle centers and radius-squared values uploaded as uniforms;
-- four exit maps uploaded as ordinary complex coefficient arrays;
-- bounded 24-step circle classification / Möbius iteration;
-- three analytic disk controls drawn in the same fragment pass;
-- event-driven redraws when camera, controls, or window state changes.
-
-The next parameter step is to let a chosen control mode request a new validated
-group and packet rather than editing renderer coefficients directly.
+These tests run on an x86_64 Android emulator. They do not establish that the
+ARMv7 APK behaves correctly on the physical MIRO A1, or establish update
+continuity on that device. Keep those acceptance boundaries open.
