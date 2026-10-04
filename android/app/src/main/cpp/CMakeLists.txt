@@ -27,6 +27,7 @@ endif()
 add_library(indras_pearls SHARED
     ${ORIGINAL_KLEINIAN_SOURCE}
     original_texture_renderer.c
+    original_trace_controls.c
     native_app_glue_stub.c
 )
 target_compile_features(indras_pearls PRIVATE c_std_11)

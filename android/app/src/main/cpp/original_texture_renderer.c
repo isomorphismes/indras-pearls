@@ -21,11 +21,57 @@ static const char *vertex_shader_source =
 static const char *fragment_shader_source =
     "#version 300 es\n"
     "precision highp float;\n"
+    "const int CONTROL_COUNT = 2;\n"
     "in vec2 v_uv;\n"
     "uniform sampler2D u_texture;\n"
-    "out vec4 out_color;\n"
+    "uniform vec2 u_control_center[CONTROL_COUNT];\n"
+    "uniform vec2 u_control_value[CONTROL_COUNT];\n"
+    "uniform float u_control_radius;\n"
+    "uniform int u_active_control;\n"
+    "layout(location = 0) out vec4 out_color;\n"
+    "\n"
+    "vec3 control_accent(int index) {\n"
+    "    if (index == 0) return vec3(0.15, 0.54, 0.92);\n"
+    "    return vec3(0.92, 0.45, 0.12);\n"
+    "}\n"
+    "\n"
+    "vec3 draw_trace_controls(vec3 base_color) {\n"
+    "    vec3 color = base_color;\n"
+    "    float extent = u_control_radius * 1.08;\n"
+    "    for (int index = 0; index < CONTROL_COUNT; ++index) {\n"
+    "        vec2 delta = gl_FragCoord.xy - u_control_center[index];\n"
+    "        if (abs(delta.x) > extent || abs(delta.y) > extent) continue;\n"
+    "        vec2 local = delta / u_control_radius;\n"
+    "        float radius = length(local);\n"
+    "        if (radius > 1.08) continue;\n"
+    "\n"
+    "        vec3 accent = control_accent(index);\n"
+    "        float inside = 1.0 - smoothstep(0.96, 1.0, radius);\n"
+    "        color = mix(color, vec3(0.055, 0.060, 0.070), inside * 0.76);\n"
+    "\n"
+    "        float horizontal = 1.0 - smoothstep(0.010, 0.028, abs(local.y));\n"
+    "        float vertical = 1.0 - smoothstep(0.010, 0.028, abs(local.x));\n"
+    "        float axes = max(horizontal, vertical) * inside;\n"
+    "        color = mix(color, vec3(0.66), axes * 0.34);\n"
+    "\n"
+    "        float rim = 1.0 - smoothstep(0.018, 0.050, abs(radius - 1.0));\n"
+    "        color = mix(color, accent, rim * 0.94);\n"
+    "\n"
+    "        float handle_distance = length(local - u_control_value[index]);\n"
+    "        float handle = 1.0 - smoothstep(0.060, 0.110, handle_distance);\n"
+    "        color = mix(color, accent, handle);\n"
+    "\n"
+    "        if (index == u_active_control) {\n"
+    "            float active_ring = 1.0 - smoothstep(0.018, 0.052, abs(radius - 0.88));\n"
+    "            color = mix(color, accent, active_ring * 0.55);\n"
+    "        }\n"
+    "    }\n"
+    "    return color;\n"
+    "}\n"
+    "\n"
     "void main() {\n"
-    "    out_color = texture(u_texture, vec2(v_uv.x, 1.0 - v_uv.y));\n"
+    "    vec4 texel = texture(u_texture, vec2(v_uv.x, 1.0 - v_uv.y));\n"
+    "    out_color = vec4(draw_trace_controls(texel.rgb), texel.a);\n"
     "}\n";
 
 static GLuint compile_shader(GLenum type, const char *source) {
@@ -90,9 +136,23 @@ bool initialize_original_texture_renderer(struct original_texture_renderer *rend
         return false;
     }
 
-    renderer->texture_location = glGetUniformLocation(renderer->program, "u_texture");
-    if (renderer->texture_location < 0) {
-        LOGE("u_texture uniform not found");
+    renderer->texture_location =
+        glGetUniformLocation(renderer->program, "u_texture");
+    renderer->control_center_location =
+        glGetUniformLocation(renderer->program, "u_control_center[0]");
+    renderer->control_value_location =
+        glGetUniformLocation(renderer->program, "u_control_value[0]");
+    renderer->control_radius_location =
+        glGetUniformLocation(renderer->program, "u_control_radius");
+    renderer->active_control_location =
+        glGetUniformLocation(renderer->program, "u_active_control");
+
+    if (renderer->texture_location < 0 ||
+        renderer->control_center_location < 0 ||
+        renderer->control_value_location < 0 ||
+        renderer->control_radius_location < 0 ||
+        renderer->active_control_location < 0) {
+        LOGE("original texture/control shader uniform not found");
         terminate_original_texture_renderer(renderer);
         return false;
     }
@@ -166,18 +226,54 @@ bool upload_original_texture(
     return true;
 }
 
-void draw_original_texture(const struct original_texture_renderer *renderer) {
-    if (renderer == NULL || renderer->program == 0 || renderer->texture == 0 ||
-        renderer->width <= 0 || renderer->height <= 0) {
+void draw_original_texture(
+    const struct original_texture_renderer *renderer,
+    const struct original_trace_controls *controls,
+    int width,
+    int height
+) {
+    if (renderer == NULL || controls == NULL ||
+        renderer->program == 0 || renderer->texture == 0 ||
+        renderer->width <= 0 || renderer->height <= 0 ||
+        width <= 0 || height <= 0) {
         return;
     }
 
-    glViewport(0, 0, renderer->width, renderer->height);
+    float centers[ORIGINAL_TRACE_CONTROL_COUNT * 2];
+    float values[ORIGINAL_TRACE_CONTROL_COUNT * 2];
+    for (int index = 0; index < ORIGINAL_TRACE_CONTROL_COUNT; ++index) {
+        original_trace_control_center(
+            index,
+            width,
+            height,
+            &centers[index * 2],
+            &centers[index * 2 + 1]
+        );
+        values[index * 2] = controls->value[index].real;
+        values[index * 2 + 1] = controls->value[index].imaginary;
+    }
+
+    glViewport(0, 0, width, height);
     glUseProgram(renderer->program);
     glBindVertexArray(renderer->vertex_array);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->texture);
     glUniform1i(renderer->texture_location, 0);
+    glUniform2fv(
+        renderer->control_center_location,
+        ORIGINAL_TRACE_CONTROL_COUNT,
+        centers
+    );
+    glUniform2fv(
+        renderer->control_value_location,
+        ORIGINAL_TRACE_CONTROL_COUNT,
+        values
+    );
+    glUniform1f(
+        renderer->control_radius_location,
+        original_trace_control_radius(width, height)
+    );
+    glUniform1i(renderer->active_control_location, controls->active_index);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(0);

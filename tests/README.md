@@ -1,69 +1,42 @@
-# Pure C mathematical core tests
+# Mathematical and interaction acceptance
 
-Run from the repository root with a C17 compiler and the system math library:
+The maintained executable commands live in
+[`android.yml`](../.github/workflows/android.yml). Host C tests use Android NDK
+`29.0.14206865` in host mode. The production ARMv7 mathematics object uses ICK C
+`ea034a574097e81d1027660b39c3e1c185d11b80`; NDK performs the platform link.
+Qualification of the host/emulator and platform-glue stages through ICK remains
+an explicit gap. Generic system `cc` is not the maintained test route.
 
-```text
-cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I android/app/src/main/cpp android/app/src/main/cpp/mobius_math.c android/app/src/main/cpp/renderer_packet.c tests/mobius_math_test.c -lm -o /tmp/indras-pearls-mobius-math-test
-/tmp/indras-pearls-mobius-math-test
-```
+## Original algorithm and trace controls
 
-The host test uses explicit binary64 tolerances:
+`original_kleinian_test.c` tests the C translation of
+`isomorphismes/kleinian-groups@117dc5f34353e98cfae2f12bf386db5862110d92`,
+including generator traces, CircleQueue growth, finite bounds, and the default
+web raster. `original_trace_controls_test.c` tests control-to-trace mapping,
+gesture capture, clamping, and changes to the actual original raster.
 
-| Check | Tolerance |
-|---|---:|
-| Determinant-one checks | `1e-12 × max(1, |ad| + |bc|)` for determinant roundoff |
-| Inverse residuals and bundled coefficients | `1e-12` absolute |
-| Projective fixed-point, action, trace-identity, and circle-equation residuals | `2e-11` absolute |
-| Circle relation classification, in affine coordinate units | `1e-12` absolute |
-| Continuity probe | `r` changes by `1e-6`; matrix and circle-center changes stay below `1e-5`, radius below `2e-6`, and the circle gap remains positive |
+`qemu-original-raster.sh` installs the finished APK in an Android emulator and
+requires dark and bright mathematical content on the GPU and decoded display.
+`qemu-original-trace-controls.sh` separately moves `tr(a).re`, `tr(a).im`,
+`tr(b).re`, and `tr(b).im` through Android touchscreen gestures. Every case must
+change the regenerated raster, GPU RGB hash, and a control-free display crop.
+Decoded RGB hashes, AE with a 2% fuzz threshold, a minimum changed-pixel count,
+and normalized RMSE above `0.005` form the visual test. Alpha and PNG metadata
+do not supply acceptance evidence.
 
-The looser projective bound covers the binary64 complex square root and division
-used to recover matrix eigenvectors, while remaining small compared with the
-bundled fixed-point separation. Circle classification uses an absolute
-coordinate tolerance because the symmetric family is tested in one fixed
-affine frame; it does not claim a scale-independent tolerance policy for
-arbitrary presentations. Tests do not call Android, EGL, GLES, or renderer code.
+The workflow verifies the existing central signer before exposing each APK.
+Emulator success is distinct from physical MIRO A1 acceptance and from an
+old-to-new replacement installation on that device.
 
-The executable prints the number of assertions it ran. Its cases cover:
+## Historical circle/packet mathematics
 
-| Test family | Mathematical fact checked |
-|---|---|
-| Canonical group and traces | `det(A)=det(B)=1`, derived inverse laws, projective normalization, `tr(AB⁻¹)=tr(A)tr(B)−tr(AB)`, Fricke commutator identity, and the bundled trace values |
-| Projective action | Matrix composition order, agreement with finite affine action, inverse action, and exact infinity at a pole |
-| Fixed points | Projective fixed-point equation, bundled closed forms, and local multipliers |
-| Circle presentation | `|cz+d|=1`, boundary-to-paired-boundary mapping, interior-to-exterior mapping, four-circle pairing, positive disjointness margin, and disjoint/tangent/overlap classification |
-| Family boundary and reconstruction | Strict `0<r<1/√2` interior status, tangent boundary, overlap rejection, exact `r=0.7` renderer coefficients, and continuity away from the boundary |
-| Renderer packet | Flattening of the validated four-circle presentation into the scalar/array GLES boundary, four independent radius-squared slots, rejection outside the classical domain, and output preservation on failure |
+`mobius_math_test.c` retains the binary64 determinant, inverse, projective-action,
+fixed-point, trace-identity, circle-pairing, domain, and renderer-packet tests.
+Determinant tolerance is `1e-12 × max(1, |ad| + |bc|)`; inverse and bundled
+coefficient tolerance is `1e-12`; projective residual tolerance is `2e-11`.
+These checks cover the historical circle family independently. They are not
+evidence that its old three-disk UI controls drive the restored application.
 
-The family constructor reports a positive parameter that cannot be represented
-with a determinant-one binary64 matrix as `FAMILY_NUMERICALLY_UNREPRESENTABLE`;
-that numerical limit is separate from the mathematical open domain.
-
-## ICK C / Android NDK boundary
-
-CI also builds the pinned ICK C compiler for ARMv7, compiles `mobius_math.c`
-and `renderer_packet.c` as freestanding `armeabi-v7a` objects, and lets
-Android NDK r29 Clang/lld perform the final shared-library link with
-`tests/renderer_packet_ndk_probe.c`.
-
-Only an ordinary `float` radius, integer status, and flat float array cross
-between ICK-compiled code and NDK-compiled code. No C aggregate or compiler
-private complex representation crosses that boundary.
-
-
-## Restored original Kleinian reference path
-
-`tests/original_kleinian_test.c` checks the C translation of the pinned
-`isomorphismes/kleinian-groups@117dc5f34353e98cfae2f12bf386db5862110d92`
-implementation. It covers the original `generators()` trace parameterization,
-the `CircleQueue` 4,6,8,... growth rule, finite/default point-set bounds, and
-the web raster contract at `tr(a)=tr(b)=2.2`.
-
-CI compiles and executes this test with the Android NDK's Clang in host mode.
-For ARMv7 production, the same `original_kleinian.c` source is compiled by
-the pinned ICK C compiler as a freestanding Thumb/softfp object; NDK then links
-that object with the Android NativeActivity/EGL/GLES wrapper.
-
-`tests/original_kleinian_ndk_probe.c` is the narrow ICK-to-NDK ABI/link probe.
-It must not be replaced by the older renderer-packet probe when the production
-APK is using the restored original algorithm.
+`original_kleinian_ndk_probe.c` is the ABI/link probe for the current ICK-produced
+original core. The older renderer-packet probe is retained for that older
+boundary and must not stand in for the production original-core probe.
