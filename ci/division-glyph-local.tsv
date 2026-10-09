@@ -1,0 +1,15 @@
+check	target	result	evidence
+source-operators	20-tracked-C-and-header-files	PASS	59 division glyphs; zero arithmetic ASCII divisions or compounds; ten preprocessor path slashes retained
+host-historical-mathematics	x86_64-linux-gnu	PASS	148 existing assertions pass on ICK before and after migration
+host-original-core	x86_64-linux-gnu	PASS	257 existing NDK baseline assertions; migrated ICK passes259 including two null-input rejection assertions
+host-original-trace-controls	x86_64-linux-gnu	PASS	24 unchanged assertions pass on prior NDK and migrated ICK
+host-historical-parameter-controls	x86_64-linux-gnu	PASS	Independent strict ICK C17 O2 object compilation; production UI unchanged
+android-owned-library	armeabi-v7a	PASS	Actual ICK plus NDK29.0.14206865 complete API26 Debug link; Thumb2 NEON softfp and inherited Fortify2 hardening/debug flags
+android-owned-library	arm64-v8a	PASS	Actual ICK plus NDK29.0.14206865 complete API26 Debug link; x18 reserved and inherited Fortify2 hardening/debug flags
+android-owned-library	x86_64	PASS	Actual ICK plus NDK29.0.14206865 complete API26 Debug link; exact shared x86-64-v2 no-AVX no-MOVBE flags
+freestanding-original-core	armeabi-v7a	PASS	Actual ICK assembly and NDK object; GNU ELF attributes verify ARMv7 and Thumb2 without hard-float arguments
+strict-original-core-link	armeabi-v7a-api21	PASS	Core and owned ABI probe both ICK-produced; actual r29 link retains z-defs z-text and fatal-warnings; exported probe retained
+freestanding-application-library	armeabi-v7a-api26	PASS	Full application-library link using the separately produced core plus ICK application glue and unchanged NDK NativeActivity glue
+build-toolchain-contract	declared-stages	PASS	Six assertions from pinned central build-toolchain-v0 contract
+finished-apk-and-emulator	exact-published-head	CI_GATE	Unchanged signer and both decoded-render/trace-control emulator oracles must run on the published head
+physical-device	MIRO-A1	NOT_RUN	Native compile and emulator checks do not establish physical device or replacement-installation acceptance

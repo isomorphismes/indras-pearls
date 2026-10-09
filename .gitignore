@@ -1,4 +1,6 @@
 .gradle/
+.ai-ci-ick/
+.ick-host-source/
 .idea/
 local.properties
 build/

@@ -40,14 +40,14 @@ struct complex_number complex_divide(struct complex_number numerator, struct com
     if (scale == 0.0 || !isfinite(scale)) {
         return complex_make(NAN, NAN);
     }
-    const double real = denominator.real / scale;
-    const double imaginary = denominator.imaginary / scale;
+    const double real = denominator.real ÷ scale;
+    const double imaginary = denominator.imaginary ÷ scale;
     const double divisor = real * real + imaginary * imaginary;
-    const double scaled_real = numerator.real / scale;
-    const double scaled_imaginary = numerator.imaginary / scale;
+    const double scaled_real = numerator.real ÷ scale;
+    const double scaled_imaginary = numerator.imaginary ÷ scale;
     return complex_make(
-        (scaled_real * real + scaled_imaginary * imaginary) / divisor,
-        (scaled_imaginary * real - scaled_real * imaginary) / divisor
+        (scaled_real * real + scaled_imaginary * imaginary) ÷ divisor,
+        (scaled_imaginary * real - scaled_real * imaginary) ÷ divisor
     );
 }
 
@@ -267,7 +267,7 @@ enum isometric_circle_status mobius_derive_isometric_circle(
     }
     const struct complex_number center_ratio = complex_divide(matrix.d, matrix.c);
     circle->center = complex_make(-center_ratio.real, -center_ratio.imaginary);
-    circle->radius = 1.0 / lower_left_magnitude;
+    circle->radius = 1.0 ÷ lower_left_magnitude;
     if (!complex_is_finite(circle->center) || !isfinite(circle->radius) || circle->radius <= 0.0) {
         return ISOMETRIC_CIRCLE_INVALID_MAP;
     }
@@ -352,7 +352,7 @@ enum family_domain_status symmetric_classical_family_make(double radius,
     if (group == NULL || !isfinite(radius) || radius <= 0.0) {
         return FAMILY_PARAMETER_INVALID;
     }
-    const double inverse_radius = 1.0 / radius;
+    const double inverse_radius = 1.0 ÷ radius;
     const double radius_squared = radius * radius;
     const struct complex_number real_inverse_radius = complex_make(inverse_radius, 0.0);
     const struct complex_number imaginary_inverse_radius = complex_make(0.0, inverse_radius);
@@ -371,7 +371,7 @@ enum family_domain_status symmetric_classical_family_make(double radius,
     if (!mobius_is_sl2(group->A, 1.0e-12) || !mobius_is_sl2(group->B, 1.0e-12)) {
         return FAMILY_NUMERICALLY_UNREPRESENTABLE;
     }
-    const double tangent_radius = 1.0 / sqrt(2.0);
+    const double tangent_radius = 1.0 ÷ sqrt(2.0);
     if (radius < tangent_radius) {
         return FAMILY_DOMAIN_INTERIOR;
     }
