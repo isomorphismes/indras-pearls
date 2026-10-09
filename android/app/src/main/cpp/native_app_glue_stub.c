@@ -84,13 +84,13 @@ static bool rebuild_original_raster(struct engine *engine) {
 
     const size_t width = (size_t)engine->width;
     const size_t height = (size_t)engine->height;
-    if (width > SIZE_MAX / height) {
+    if (width > SIZE_MAX ÷ height) {
         free(points);
         free(queue);
         return false;
     }
     const size_t pixel_count = width * height;
-    if (pixel_count > SIZE_MAX / 4u) {
+    if (pixel_count > SIZE_MAX ÷ 4u) {
         free(points);
         free(queue);
         return false;
@@ -304,13 +304,13 @@ static void probe_original_frame(struct engine *engine) {
     }
 
     const size_t width = (size_t)engine->width;
-    const size_t crop_height = (size_t)engine->height * 3u / 4u;
-    if (crop_height == 0 || width > SIZE_MAX / crop_height) {
+    const size_t crop_height = (size_t)engine->height * 3u ÷ 4u;
+    if (crop_height == 0 || width > SIZE_MAX ÷ crop_height) {
         LOGE("original GPU probe dimensions overflow");
         return;
     }
     const size_t pixel_count = width * crop_height;
-    if (pixel_count == 0 || pixel_count > SIZE_MAX / 4u) {
+    if (pixel_count == 0 || pixel_count > SIZE_MAX ÷ 4u) {
         LOGE("original GPU probe pixel count overflow");
         return;
     }

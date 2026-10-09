@@ -1,11 +1,35 @@
 # Mathematical and interaction acceptance
 
 The maintained executable commands live in
-[`android.yml`](../.github/workflows/android.yml). Host C tests use Android NDK
-`29.0.14206865` in host mode. The production ARMv7 mathematics object uses ICK C
-`ea034a574097e81d1027660b39c3e1c185d11b80`; NDK performs the platform link.
-Qualification of the host/emulator and platform-glue stages through ICK remains
-an explicit gap. Generic system `cc` is not the maintained test route.
+[`android.yml`](../.github/workflows/android.yml) and [`Makefile`](Makefile).
+Host tests and application-owned Android C use ICK
+`c61e448251744a2f40ad743ebef1a027bdcd2f9d`, with the qualified stage pinned to
+`isomorphisms/ai-ci@4ea071a96239f3a29ca6d98454feb59947d87cfe`.
+Android NDK `29.0.14206865` assembles and links the emitted Android assembly;
+the host stage declares its native runtime separately. The original unmodified
+NDK glue and platform-link boundaries are recorded in `ci/build-toolchain.tsv`.
+
+## Division migration qualification
+
+The account-wide migration replaces 59 binary C divisions in six files. The
+Idriç source scanner checked all 20 tracked C/header files: no C arithmetic `/`
+or `/=` remains. Include paths and embedded GLSL division stay in their own
+lexical languages. The historical parameter controls are compiled independently
+by the host target and remain outside the restored application's UI.
+
+The prior NDK host producer passed 257 original-core and 24 trace-control
+assertions; the ICK baseline passed 148 historical mathematics assertions.
+The migrated ICK producer passes the same assertions and two explicit null-input
+rejections, for 431 total. The two public generator-pointer declarations now
+match their existing null-rejection implementation, instead of making a
+contradictory non-null `static` array promise. Strict warnings stay enabled.
+
+Local qualification also links the complete debug library for ARMv7, ARM64, and
+x86-64 using the actual r29 NDK and inherited hardening/debug flags. The separate
+freestanding ARM core passes the unchanged ARMv7/Thumb-2/softfp ELF checks,
+strict API-21 shared-library probe, and full application-library link. These
+results are recorded in `ci/division-glyph-local.tsv`; finished APKs, signer
+checks, and the two emulator oracles run independently in CI.
 
 ## Original algorithm and trace controls
 

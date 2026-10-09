@@ -50,14 +50,16 @@ struct original_kleinian_window_transform {
  */
 size_t original_kleinian_point_capacity(size_t num_points);
 
+/* Non-null generator pointers designate ORIGINAL_KLEINIAN_GENERATOR_COUNT
+ * elements. Both entrypoints reject a null generator pointer. */
 bool original_kleinian_generators(
     struct original_kleinian_complex ta,
     struct original_kleinian_complex tb,
-    struct original_kleinian_generator out[static ORIGINAL_KLEINIAN_GENERATOR_COUNT]
+    struct original_kleinian_generator *out
 );
 
 bool original_kleinian_generate_points(
-    const struct original_kleinian_generator generators[static ORIGINAL_KLEINIAN_GENERATOR_COUNT],
+    const struct original_kleinian_generator *generators,
     size_t num_points,
     struct original_kleinian_queue_item *queue_storage,
     size_t queue_capacity,

@@ -28,6 +28,7 @@ static void test_original_default_generators(void) {
     const struct original_kleinian_complex ta = {2.2, 0.0};
     const struct original_kleinian_complex tb = {2.2, 0.0};
 
+    CHECK(!original_kleinian_generators(ta, tb, NULL));
     CHECK(original_kleinian_generators(ta, tb, generators));
 
     /*
@@ -88,6 +89,9 @@ static void test_original_circle_queue(void) {
     const struct original_kleinian_complex ta = {2.2, 0.0};
     const struct original_kleinian_complex tb = {2.2, 0.0};
     size_t count = 0;
+    CHECK(!original_kleinian_generate_points(
+        NULL, request, queue, capacity, points, capacity, &count
+    ));
     CHECK(original_kleinian_generate_points_from_traces(
         ta, tb, request, queue, capacity, points, capacity, &count
     ));

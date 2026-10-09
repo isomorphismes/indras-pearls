@@ -70,12 +70,12 @@ static C c_div(C numerator, C denominator) {
     if (scale == 0.0 || !isfinite(scale)) {
         return c_make(ORIGINAL_KLEINIAN_NAN, ORIGINAL_KLEINIAN_NAN);
     }
-    const double dr = denominator.re / scale;
-    const double di = denominator.im / scale;
+    const double dr = denominator.re ÷ scale;
+    const double di = denominator.im ÷ scale;
     const double divisor = dr * dr + di * di;
-    const double nr = numerator.re / scale;
-    const double ni = numerator.im / scale;
-    return c_make((nr * dr + ni * di) / divisor, (ni * dr - nr * di) / divisor);
+    const double nr = numerator.re ÷ scale;
+    const double ni = numerator.im ÷ scale;
+    return c_make((nr * dr + ni * di) ÷ divisor, (ni * dr - nr * di) ÷ divisor);
 }
 
 static C c_sqrt(C value) {
@@ -244,7 +244,7 @@ static bool circle_center(Circle circle, C *center) {
     if (denominator == 0.0 || !isfinite(denominator)) {
         return false;
     }
-    *center = c_scale(c_neg(circle.hermitian.b), 1.0 / denominator);
+    *center = c_scale(c_neg(circle.hermitian.b), 1.0 ÷ denominator);
     return c_finite(*center);
 }
 
@@ -256,7 +256,7 @@ static bool matrix_finite(M matrix) {
 bool original_kleinian_generators(
     C ta,
     C tb,
-    Generator out[static ORIGINAL_KLEINIAN_GENERATOR_COUNT]
+    Generator *out
 ) {
     if (out == NULL || !c_finite(ta) || !c_finite(tb)) {
         return false;
@@ -347,7 +347,7 @@ static bool heap_push(struct heap *heap, QueueItem item) {
     size_t index = heap->len++;
     heap->items[index] = item;
     while (index > 0) {
-        size_t parent = (index - 1u) / 2u;
+        size_t parent = (index - 1u) ÷ 2u;
         if (!(heap->items[index].priority > heap->items[parent].priority)) {
             break;
         }
@@ -416,7 +416,7 @@ static bool make_queue_item(
 }
 
 bool original_kleinian_generate_points(
-    const Generator generators[static ORIGINAL_KLEINIAN_GENERATOR_COUNT],
+    const Generator *generators,
     size_t num_points,
     QueueItem *queue_storage,
     size_t queue_capacity,
@@ -539,16 +539,16 @@ bool original_kleinian_window_transform(
 
     const double w = (double)width;
     const double h = (double)height;
-    const double sx = w / xrange;
-    const double sy = h / yrange;
+    const double sx = w ÷ xrange;
+    const double sy = h ÷ yrange;
     const double scale = (sx < sy ? sx : sy) * 0.999;
     if (!(scale > 0.0) || !isfinite(scale)) {
         return false;
     }
 
     transform->scale = scale;
-    transform->xoff = 0.5 * (xmin + xmax - w / scale);
-    transform->yoff = 0.5 * (ymin + ymax - h / scale);
+    transform->xoff = 0.5 * (xmin + xmax - w ÷ scale);
+    transform->yoff = 0.5 * (ymin + ymax - h ÷ scale);
     return isfinite(transform->xoff) && isfinite(transform->yoff);
 }
 
@@ -582,11 +582,11 @@ bool original_kleinian_rasterize_rgba(
     if (points == NULL || rgba == NULL || width == 0 || height == 0) {
         return false;
     }
-    if (width > SIZE_MAX / height) {
+    if (width > SIZE_MAX ÷ height) {
         return false;
     }
     size_t pixels = width * height;
-    if (pixels > SIZE_MAX / 4u || rgba_size < pixels * 4u) {
+    if (pixels > SIZE_MAX ÷ 4u || rgba_size < pixels * 4u) {
         return false;
     }
 

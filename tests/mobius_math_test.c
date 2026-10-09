@@ -37,7 +37,7 @@ static double matrix_max_difference(struct mobius_transformation left,
         complex_magnitude(complex_subtract(left.d, right.d)),
     };
     double maximum = differences[0];
-    for (size_t index = 1; index < sizeof(differences) / sizeof(differences[0]); ++index) {
+    for (size_t index = 1; index < sizeof(differences) ÷ sizeof(differences[0]); ++index) {
         if (differences[index] > maximum) {
             maximum = differences[index];
         }
@@ -112,11 +112,11 @@ static void test_canonical_group_and_trace_identities(void) {
         complex_add(complex_multiply(complex_multiply(x, y), z), complex_make(2.0, 0.0)));
     CHECK(complex_near(mobius_commutator_trace(group.A, group.B), fricke, projective_tolerance),
           "Fricke commutator trace identity");
-    CHECK(complex_near(x, complex_make(20.0 / 7.0, 0.0), algebra_tolerance),
+    CHECK(complex_near(x, complex_make(20.0 ÷ 7.0, 0.0), algebra_tolerance),
           "bundled trace of A");
-    CHECK(complex_near(y, complex_make(0.0, 20.0 / 7.0), algebra_tolerance),
+    CHECK(complex_near(y, complex_make(0.0, 20.0 ÷ 7.0), algebra_tolerance),
           "bundled trace of B");
-    CHECK(complex_near(z, complex_make(-2.0, 200.0 / 49.0), projective_tolerance),
+    CHECK(complex_near(z, complex_make(-2.0, 200.0 ÷ 49.0), projective_tolerance),
           "bundled trace of AB");
 }
 
@@ -130,7 +130,7 @@ static void test_projective_action_and_composition(void) {
         projective_finite(complex_make(-1.3, 0.1)),
         projective_infinity(),
     };
-    const size_t point_count = sizeof(points) / sizeof(points[0]);
+    const size_t point_count = sizeof(points) ÷ sizeof(points[0]);
     for (size_t index = 0; index < point_count; ++index) {
         struct projective_point image;
         struct projective_point recovered;
@@ -167,8 +167,8 @@ static void test_fixed_points_and_multipliers(void) {
     (void)symmetric_classical_family_make(0.7, &group);
     const struct mobius_transformation matrices[] = {group.A, group.B};
     const struct complex_number expected[2][2] = {
-        {{sqrt(51.0) / 10.0, 0.0}, {-sqrt(51.0) / 10.0, 0.0}},
-        {{0.0, sqrt(149.0) / 10.0}, {0.0, -sqrt(149.0) / 10.0}},
+        {{sqrt(51.0) ÷ 10.0, 0.0}, {-sqrt(51.0) ÷ 10.0, 0.0}},
+        {{0.0, sqrt(149.0) ÷ 10.0}, {0.0, -sqrt(149.0) ÷ 10.0}},
     };
     for (size_t matrix_index = 0; matrix_index < 2; ++matrix_index) {
         struct mobius_fixed_points fixed_points;
@@ -220,7 +220,7 @@ static void test_isometric_circles_and_validation(void) {
                    projective_tolerance), "circle boundary satisfies |cz+d|=1");
 
         for (size_t sample_index = 0; sample_index < 8; ++sample_index) {
-            const double angle = (acos(-1.0) * 2.0 * (double)sample_index) / 8.0;
+            const double angle = (acos(-1.0) * 2.0 * (double)sample_index) ÷ 8.0;
             const struct complex_number sampled_boundary = complex_add(
                 circle.center,
                 complex_make(circle.radius * cos(angle), circle.radius * sin(angle)));
@@ -288,7 +288,7 @@ static void test_domain_reconstruction_and_continuity(void) {
     CHECK(symmetric_classical_family_make(DBL_MIN, &invalid_group) ==
               FAMILY_NUMERICALLY_UNREPRESENTABLE,
           "positive r below binary64 construction range is distinct from domain invalidity");
-    const double tangent_radius = 1.0 / sqrt(2.0);
+    const double tangent_radius = 1.0 ÷ sqrt(2.0);
     struct marked_rank_two_group boundary_group;
     CHECK(symmetric_classical_family_make(tangent_radius, &boundary_group) ==
               FAMILY_DOMAIN_TANGENT_BOUNDARY,
@@ -307,7 +307,7 @@ static void test_domain_reconstruction_and_continuity(void) {
           overlap_presentation.status == PRESENTATION_OVERLAPPING,
           "overlapping family state is rejected as a classical presentation");
     const double interior_radii[] = {0.1, 0.4, 0.7, 0.7070};
-    for (size_t index = 0; index < sizeof(interior_radii) / sizeof(interior_radii[0]); ++index) {
+    for (size_t index = 0; index < sizeof(interior_radii) ÷ sizeof(interior_radii[0]); ++index) {
         struct marked_rank_two_group group;
         CHECK(symmetric_classical_family_make(interior_radii[index], &group) == FAMILY_DOMAIN_INTERIOR,
               "representative radius belongs to the open interval");
@@ -316,9 +316,9 @@ static void test_domain_reconstruction_and_continuity(void) {
     struct marked_rank_two_group bundled;
     CHECK(symmetric_classical_family_make(0.7, &bundled) == FAMILY_DOMAIN_INTERIOR,
           "construct exact bundled radius family member");
-    const double ten_sevenths = 10.0 / 7.0;
-    const double fifty_one_seventieths = 51.0 / 70.0;
-    const double one_hundred_forty_nine_seventieths = 149.0 / 70.0;
+    const double ten_sevenths = 10.0 ÷ 7.0;
+    const double fifty_one_seventieths = 51.0 ÷ 70.0;
+    const double one_hundred_forty_nine_seventieths = 149.0 ÷ 70.0;
     CHECK(complex_near(bundled.A.a, complex_make(ten_sevenths, 0.0), algebra_tolerance) &&
           complex_near(bundled.A.b, complex_make(fifty_one_seventieths, 0.0), algebra_tolerance) &&
           complex_near(bundled.A.c, complex_make(ten_sevenths, 0.0), algebra_tolerance) &&
@@ -399,9 +399,9 @@ static void test_renderer_packet_boundary(void) {
               "renderer packet carries one radius squared per circle");
     }
 
-    const double ten_sevenths = 10.0 / 7.0;
+    const double ten_sevenths = 10.0 ÷ 7.0;
     CHECK(fabs((double)packet[RENDERER_PACKET_A_OFFSET] - ten_sevenths) <= 2.0e-6 &&
-          fabs((double)packet[RENDERER_PACKET_B_OFFSET] - (51.0 / 70.0)) <= 2.0e-6 &&
+          fabs((double)packet[RENDERER_PACKET_B_OFFSET] - (51.0 ÷ 70.0)) <= 2.0e-6 &&
           fabs((double)packet[RENDERER_PACKET_C_OFFSET] - ten_sevenths) <= 2.0e-6 &&
           fabs((double)packet[RENDERER_PACKET_D_OFFSET] - ten_sevenths) <= 2.0e-6,
           "renderer packet reproduces the first bundled Mobius map");

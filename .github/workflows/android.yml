@@ -1,4 +1,4 @@
-name: Android native Indra's Pearls stub
+name: Android native Indra's Pearls
 
 on:
   push:
@@ -12,45 +12,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  compilers:
+    uses: ./.github/workflows/ick-compilers.yml
+
   host-mathematics:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_NDK_VERSION: 29.0.14206865
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+      - uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        id: ick
+      - name: Build and run the unchanged mathematics suites through ICK
+        run: make -f tests/Makefile test ICK="${{ steps.ick.outputs.compiler }}" ICK_LINK_FLAGS="${{ steps.ick.outputs.link_flags }}"
+      - name: Check out the declared toolchain contract
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          packages: platform-tools
-
-      - name: Install Android NDK test toolchain
-        run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
-
-      - name: Build and run deterministic mathematics tests with NDK Clang
+          repository: isomorphisms/ai-ci
+          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          path: .ai-ci-ick
+          persist-credentials: false
+      - name: Enforce the ICK and NDK stage declarations
         run: |
-          set -euxo pipefail
-          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          ndk_cc="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
-          host=(--target=x86_64-linux-gnu --gcc-toolchain=/usr)
-
-          "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2             -I android/app/src/main/cpp             android/app/src/main/cpp/mobius_math.c             android/app/src/main/cpp/renderer_packet.c             tests/mobius_math_test.c -lm             -o /tmp/indras-pearls-mobius-math-test
-          /tmp/indras-pearls-mobius-math-test
-
-          "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2             -I android/app/src/main/cpp             android/app/src/main/cpp/original_kleinian.c             tests/original_kleinian_test.c -lm             -o /tmp/indras-pearls-original-kleinian-test
-          /tmp/indras-pearls-original-kleinian-test
-
-          "$ndk_cc" "${host[@]}" -std=c17 -Wall -Wextra -Werror -pedantic -O2 \
-            -I android/app/src/main/cpp \
-            android/app/src/main/cpp/original_kleinian.c \
-            android/app/src/main/cpp/original_trace_controls.c \
-            tests/original_trace_controls_test.c -lm \
-            -o /tmp/indras-pearls-original-trace-controls-test
-          /tmp/indras-pearls-original-trace-controls-test
+          "${{ steps.ick.outputs.compiler }}" ${{ steps.ick.outputs.link_flags }} -std=c17 -O2 -Wall -Wextra -Werror .ai-ci-ick/src/aici.c -o "$RUNNER_TEMP/aici-icky"
+          "$RUNNER_TEMP/aici-icky" verify .ai-ci-ick/contracts/build-toolchain-v0.contract.tsv .
 
   android:
+    needs: compilers
     runs-on: ubuntu-latest
     env:
       INDRAS_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
@@ -88,6 +78,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
         with:
           gradle-version: "8.13"
+
+      - name: Check out the qualified C stage
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          path: .ai-ci-ick
+          persist-credentials: false
+
+      - name: Download the three qualified ABI stages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ick-*
+          path: build/ick-packages
+          merge-multiple: true
+
+      - name: Restore the installed compiler stages
+        run: |
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=armeabi-v7a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/armeabi-v7a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-armeabi-v7a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=arm64-v8a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/arm64-v8a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-arm64-v8a.tar.gz"
+          make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=x86_64 ICK_STAGE="$GITHUB_WORKSPACE/build/ick/x86_64" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-x86_64.tar.gz"
 
       - name: Build debug APK
         run: gradle --no-daemon :android:app:assembleDebug
@@ -213,10 +224,11 @@ jobs:
 
 
   ick-armv7-boundary:
+    needs: compilers
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      ICK_COMMIT: ea034a574097e81d1027660b39c3e1c185d11b80
+      ICK_COMMIT: c61e448251744a2f40ad743ebef1a027bdcd2f9d
       ANDROID_NDK_VERSION: 29.0.14206865
       INDRAS_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       INDRAS_TEST_KEYSTORE_PASSWORD: wegert-debug
@@ -236,49 +248,22 @@ jobs:
           sparse-checkout: _/build/app/wegert-debug.keystore
           sparse-checkout-cone-mode: false
 
-      - name: Check out pinned ICK C compiler source
+      - name: Check out the qualified C stage
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          repository: dilapidated-shed/ick
-          ref: ${{ env.ICK_COMMIT }}
-          path: _ick
-          submodules: true
+          repository: isomorphisms/ai-ci
+          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          path: .ai-ci-ick
+          persist-credentials: false
 
-      - name: Build ARMv7 ICK C compiler
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential flex bison texinfo \
-            libgmp-dev libmpfr-dev libmpc-dev libisl-dev libzstd-dev \
-            binutils-arm-linux-gnueabi
-          (
-            cd _ick
-            . ick/SOURCE.lock
-            test "$(git -C gcc rev-parse HEAD)" = "$gcc_commit"
-            sh ick/materialize.sh gcc source
-            mkdir build stage
-            cd build
-            ../source/configure \
-              --target=arm-linux-gnueabi \
-              --prefix="$GITHUB_WORKSPACE/_ick/stage" \
-              --with-as="$(command -v arm-linux-gnueabi-as)" \
-              --with-ld="$(command -v arm-linux-gnueabi-ld)" \
-              --enable-languages=c \
-              --disable-bootstrap \
-              --disable-multilib \
-              --disable-nls \
-              --disable-shared \
-              --disable-threads \
-              --without-headers \
-              --disable-libatomic \
-              --disable-libgomp \
-              --disable-libquadmath \
-              --disable-libssp \
-              --disable-libvtv
-            make -j2 all-gcc
-            make install-gcc
-          )
+      - name: Download the qualified ARM compiler stage
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ick-armeabi-v7a
+          path: build/ick-packages
+
+      - name: Restore the installed ARM stage
+        run: make -f .ai-ci-ick/ick-android/Makefile restore-stage ABI=armeabi-v7a ICK_STAGE="$GITHUB_WORKSPACE/build/ick/armeabi-v7a" ICK_ARCHIVE="$GITHUB_WORKSPACE/build/ick-packages/ick-armeabi-v7a.tar.gz"
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -304,17 +289,13 @@ jobs:
       - name: Compile original Kleinian production core with ICK
         run: |
           set -euxo pipefail
-          mkdir -p build/ick/armeabi-v7a
-          ick="$GITHUB_WORKSPACE/_ick/stage/bin/arm-linux-gnueabi-gcc"
-          flags=(-march=armv7-a -mthumb -mfpu=neon -mfloat-abi=softfp)
-          include=(-I android/app/src/main/cpp)
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          make -f tests/Makefile arm-boundary \
+            ICK_ARMV7="$GITHUB_WORKSPACE/build/ick/armeabi-v7a/bin/arm-linux-gnueabi-gcc" \
+            NDK="$sdk_root/ndk/$ANDROID_NDK_VERSION"
+          llvm_bin="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
-          "$ick" "${flags[@]}" -std=c11 -O2 -fPIC -ffreestanding \
-            -DINDRAS_FREESTANDING_MATH "${include[@]}" \
-            -c android/app/src/main/cpp/original_kleinian.c \
-            -o build/ick/armeabi-v7a/original_kleinian.o
-
-          arm-linux-gnueabi-readelf -A build/ick/armeabi-v7a/original_kleinian.o \
+          readelf -A build/ick/armeabi-v7a/original_kleinian.o \
             | tee build/ick/armeabi-v7a/original_kleinian.attributes
           grep -q 'Tag_CPU_arch: v7' build/ick/armeabi-v7a/original_kleinian.attributes
           grep -q 'Tag_THUMB_ISA_use: Thumb-2' build/ick/armeabi-v7a/original_kleinian.attributes
@@ -329,17 +310,6 @@ jobs:
           set -euxo pipefail
           sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           llvm_bin="$sdk_root/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          ndk_cc="$llvm_bin/armv7a-linux-androideabi21-clang"
-          include=(-I android/app/src/main/cpp)
-
-          "$ndk_cc" -std=c11 -O2 -fPIC "${include[@]}" \
-            -c tests/original_kleinian_ndk_probe.c \
-            -o build/ick/armeabi-v7a/original_kleinian_ndk_probe.o
-          "$ndk_cc" -shared -Wl,-z,defs -Wl,-z,text -Wl,--fatal-warnings \
-            build/ick/armeabi-v7a/original_kleinian.o \
-            build/ick/armeabi-v7a/original_kleinian_ndk_probe.o \
-            -lm -o build/ick/armeabi-v7a/libindras-original-kleinian.so
-
           "$llvm_bin/llvm-readelf" -h build/ick/armeabi-v7a/libindras-original-kleinian.so \
             | tee build/ick/armeabi-v7a/ick-original.elf
           grep -q 'Class:.*ELF32' build/ick/armeabi-v7a/ick-original.elf

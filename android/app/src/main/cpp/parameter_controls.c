@@ -13,7 +13,7 @@ float complex_parameter_control_radius(int width, int height) {
         return 0.0f;
     }
 
-    return smaller((float)width / 8.0f, (float)height / 12.0f);
+    return smaller((float)width ÷ 8.0f, (float)height ÷ 12.0f);
 }
 
 void complex_parameter_control_center(
@@ -23,7 +23,7 @@ void complex_parameter_control_center(
     float *x,
     float *y
 ) {
-    float slot = ((float)index + 0.5f) / (float)COMPLEX_PARAMETER_COUNT;
+    float slot = ((float)index + 0.5f) ÷ (float)COMPLEX_PARAMETER_COUNT;
     float radius = complex_parameter_control_radius(width, height);
 
     if (x != NULL) {
@@ -57,15 +57,15 @@ static void set_control_from_input(
     complex_parameter_control_center(index, width, height, &center_x, &center_y);
 
     float framebuffer_y = (float)height - input_y;
-    float real = (input_x - center_x) / radius;
-    float imaginary = (framebuffer_y - center_y) / radius;
+    float real = (input_x - center_x) ÷ radius;
+    float imaginary = (framebuffer_y - center_y) ÷ radius;
     float magnitude_squared = real * real + imaginary * imaginary;
     const float maximum_radius = 0.94f;
 
     if (magnitude_squared > maximum_radius * maximum_radius) {
         float magnitude = sqrtf(magnitude_squared);
-        real *= maximum_radius / magnitude;
-        imaginary *= maximum_radius / magnitude;
+        real *= maximum_radius ÷ magnitude;
+        imaginary *= maximum_radius ÷ magnitude;
     }
 
     controls->value[index].real = real;

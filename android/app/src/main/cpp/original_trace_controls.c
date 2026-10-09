@@ -17,7 +17,7 @@ float original_trace_control_radius(int width, int height) {
     if (width <= 0 || height <= 0) {
         return 0.0f;
     }
-    return smaller((float)width / 6.0f, (float)height / 10.0f);
+    return smaller((float)width ÷ 6.0f, (float)height ÷ 10.0f);
 }
 
 void original_trace_control_center(
@@ -28,7 +28,7 @@ void original_trace_control_center(
     float *y
 ) {
     const float radius = original_trace_control_radius(width, height);
-    const float slot = ((float)index + 0.5f) / (float)ORIGINAL_TRACE_CONTROL_COUNT;
+    const float slot = ((float)index + 0.5f) ÷ (float)ORIGINAL_TRACE_CONTROL_COUNT;
     if (x != NULL) {
         *x = slot * (float)width;
     }
@@ -55,15 +55,15 @@ static void set_control_from_input(
     original_trace_control_center(index, width, height, &center_x, &center_y);
 
     const float framebuffer_y = (float)height - input_y;
-    float real = (input_x - center_x) / radius;
-    float imaginary = (framebuffer_y - center_y) / radius;
+    float real = (input_x - center_x) ÷ radius;
+    float imaginary = (framebuffer_y - center_y) ÷ radius;
     const float magnitude_squared = real * real + imaginary * imaginary;
     const float limit = ORIGINAL_TRACE_CONTROL_LIMIT;
 
     if (magnitude_squared > limit * limit) {
         const float magnitude = sqrtf(magnitude_squared);
-        real *= limit / magnitude;
-        imaginary *= limit / magnitude;
+        real *= limit ÷ magnitude;
+        imaginary *= limit ÷ magnitude;
     }
 
     controls->value[index].real = real;
