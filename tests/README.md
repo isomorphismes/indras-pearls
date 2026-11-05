@@ -2,9 +2,11 @@
 
 The maintained executable commands live in
 [`android.yml`](../.github/workflows/android.yml) and [`Makefile`](Makefile).
-Host tests and application-owned Android C use ICK
-`c61e448251744a2f40ad743ebef1a027bdcd2f9d`, with the qualified stage pinned to
-`isomorphisms/ai-ci@4ea071a96239f3a29ca6d98454feb59947d87cfe`.
+Host tests retain ICK `c61e448251744a2f40ad743ebef1a027bdcd2f9d` through
+ai-ci4ea071a. Current Android C uses ICK `fbe86e23d55cfec2000c08e61deea2a407fd7175` and
+matching producer/restoration ai-ci `f6d825d15cd3c0c34ae1b43240a463ff5d343090` for the retained
+NDK29 assembler capability. The following local division-migration evidence
+is historical c61 evidence; current Android consumer execution is a CI gate.
 Android NDK `29.0.14206865` assembles and links the emitted Android assembly;
 the host stage declares its native runtime separately. The original unmodified
 NDK glue and platform-link boundaries are recorded in `ci/build-toolchain.tsv`.

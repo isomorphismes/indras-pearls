@@ -1,7 +1,7 @@
 # Charcoal presentation
 
-Shared Android presentation owner: `e8b67dfc67776c2b8da919785d15f38d68c91db0`.
-The four resource files are verified byte-for-byte by the shared canonical
+Shared Android presentation owner: `38d6899706d855201239d86e1629e2620c0e8821`.
+The seven resource files are verified byte-for-byte by the shared canonical
 Grease copy guard. The app explicitly chooses the charcoal fullscreen theme,
 independent of system night mode. Window, dialog and system-bar policy comes
 from the common owner.
@@ -20,3 +20,10 @@ the existing source. No Java/Kotlin or framework is added. Exact-head host,
 APK and both original-raster/trace-control tests must pass. API29/API34
 both-mode palette/lifecycle acceptance and physical C67 execution are NOT_RUN.
 No merge, release or installed-app replacement is performed.
+
+The shared theme now has API-qualified window/dialog policies, preserving the
+API26 floor without lint suppression. Android compiler qualification also
+promotes to matching ai-ci f6d825d/ICK fbe86e2 after the concrete old .base64
+assembler failure on ARM64/x86. Host ICK, NDK29, Fortify2, signing, exact
+mathematics and both original-raster/trace-control observers remain unchanged.
+The preceding c61 local evidence is historical; current execution is pending.
