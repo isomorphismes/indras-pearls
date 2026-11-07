@@ -13,6 +13,12 @@ printf 'state\tstarted\n' > "$out/status.tsv"
 actual_api="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 test "$actual_api" = "$expected_api"
 printf 'api\t%s\n' "$actual_api" > "$out/device.tsv"
+# An emulator is blank on startup: install the exact APK that upstream
+# signed and uploaded before asserting Activity presence or presentation.
+adb install -r "$apk" | tee "$out/install.txt"
+grep -Fx 'Success' "$out/install.txt"
+adb shell pm path "$package" | tee "$out/package-path.txt"
+grep -F 'package:' "$out/package-path.txt"
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 adb shell svc power stayon true
