@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: f6d825d15cd3c0c34ae1b43240a463ff5d343090
           path: .ai-ci-ick
           persist-credentials: false
       - name: Enforce the ICK and NDK stage declarations
@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: f6d825d15cd3c0c34ae1b43240a463ff5d343090
           path: .ai-ci-ick
           persist-credentials: false
 
@@ -228,7 +228,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      ICK_COMMIT: c61e448251744a2f40ad743ebef1a027bdcd2f9d
+      ICK_COMMIT: fbe86e23d55cfec2000c08e61deea2a407fd7175
       ANDROID_NDK_VERSION: 29.0.14206865
       INDRAS_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       INDRAS_TEST_KEYSTORE_PASSWORD: wegert-debug
@@ -252,7 +252,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: f6d825d15cd3c0c34ae1b43240a463ff5d343090
           path: .ai-ci-ick
           persist-credentials: false
 
