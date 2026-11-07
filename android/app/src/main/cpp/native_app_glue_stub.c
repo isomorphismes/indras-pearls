@@ -1,3 +1,4 @@
+#include <android/configuration.h>
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -34,6 +35,35 @@ struct engine {
 };
 
 static void terminate_display(struct engine *engine);
+
+/* Observe the running Activity's resource qualifier, not an assumed system
+ * preference or merely a requested emulator mode. */
+static void log_resource_night(struct android_app *app, const char *event) {
+    if (app == NULL || app->activity == NULL ||
+        app->activity->assetManager == NULL) {
+        LOGE("original resource night: missing Activity asset manager");
+        return;
+    }
+
+    AConfiguration *configuration = AConfiguration_new();
+    if (configuration == NULL) {
+        LOGE("original resource night: allocation failed");
+        return;
+    }
+    AConfiguration_fromAssetManager(
+        configuration, app->activity->assetManager
+    );
+    const int32_t night = AConfiguration_getUiModeNight(configuration);
+    const char *mode = "unknown";
+    if (night == ACONFIGURATION_UI_MODE_NIGHT_YES) {
+        mode = "yes";
+    } else if (night == ACONFIGURATION_UI_MODE_NIGHT_NO) {
+        mode = "no";
+    }
+    LOGI("original resource night: event=%s actual=%s qualifier=%d",
+         event, mode, night);
+    AConfiguration_delete(configuration);
+}
 
 static uint64_t rgb_hash(
     const uint8_t *rgba,
@@ -504,8 +534,12 @@ static void handle_command(struct android_app *app, int32_t command) {
             break;
 
         case APP_CMD_WINDOW_RESIZED:
-        case APP_CMD_CONFIG_CHANGED:
         case APP_CMD_GAINED_FOCUS:
+            engine->dirty = true;
+            break;
+
+        case APP_CMD_CONFIG_CHANGED:
+            log_resource_night(app, "configuration");
             engine->dirty = true;
             break;
 
@@ -527,6 +561,7 @@ void android_main(struct android_app *app) {
     app->userData = &engine;
     app->onAppCmd = handle_command;
     app->onInputEvent = handle_input;
+    log_resource_night(app, "launch");
 
     while (true) {
         int events = 0;
