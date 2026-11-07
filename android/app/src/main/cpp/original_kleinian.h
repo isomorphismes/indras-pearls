@@ -52,6 +52,24 @@ size_t original_kleinian_point_capacity(size_t num_points);
 
 /* Non-null generator pointers designate ORIGINAL_KLEINIAN_GENERATOR_COUNT
  * elements. Both entrypoints reject a null generator pointer. */
+/*
+ * A rank-two SL(2,C) character witness with independent trace coordinates
+ * x=tr(A), y=tr(B), z=tr(AB). This returns matrices, NOT Kleinian circles
+ * or a qualified discrete group. It does not replace the original
+ * parabolic-commutator (`tr([A,B])=-2`) rendering path above.
+ *
+ * Valid finite triples admit a matrix witness mathematically; the numerical
+ * implementation rejects nonfinite/overflow results and leaves output
+ * arguments unchanged on failure. Callers own both matrix objects.
+ */
+bool original_kleinian_character_matrices(
+    struct original_kleinian_complex x,
+    struct original_kleinian_complex y,
+    struct original_kleinian_complex z,
+    struct original_kleinian_matrix2 *a,
+    struct original_kleinian_matrix2 *b
+);
+
 bool original_kleinian_generators(
     struct original_kleinian_complex ta,
     struct original_kleinian_complex tb,

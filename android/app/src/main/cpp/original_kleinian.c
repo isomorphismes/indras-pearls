@@ -253,6 +253,60 @@ static bool matrix_finite(M matrix) {
         c_finite(matrix.c) && c_finite(matrix.d);
 }
 
+/*
+ * Construct SL(2,C) matrices with arbitrary finite trace coordinates.
+ *
+ * Let A=[x,-1;1,0], B=[0,u;v,y], so tr(AB)=u-v and det(B)=-uv.
+ * Choosing u as a root of u^2 - z*u + 1=0 and v=-1/u gives
+ * det(A)=det(B)=1, tr(A)=x, tr(B)=y and tr(AB)=z.
+ *
+ * Select the larger-modulus root to avoid cancellation when computing
+ * v. This is a character witness, NOT a discreteness/limit-set claim.
+ * The original parabolic renderer below is unchanged.
+ */
+bool original_kleinian_character_matrices(
+    C x,
+    C y,
+    C z,
+    M *a,
+    M *b
+) {
+    if (a == NULL || b == NULL || a == b ||
+        !c_finite(x) || !c_finite(y) || !c_finite(z)) {
+        return false;
+    }
+
+    const C root = c_sqrt(c_sub(c_mul(z, z), c_real(4.0)));
+    if (!c_finite(root)) {
+        return false;
+    }
+    const C plus = c_scale(c_add(z, root), 0.5);
+    const C minus = c_scale(c_sub(z, root), 0.5);
+    const C upper = c_norm_sqr(plus) >= c_norm_sqr(minus) ? plus : minus;
+    if (!c_finite(upper) || c_abs(upper) == 0.0) {
+        return false;
+    }
+    const C lower = c_div(c_real(-1.0), upper);
+    const M candidate_a = {
+        .a = x,
+        .b = {-1.0, 0.0},
+        .c = {1.0, 0.0},
+        .d = {0.0, 0.0},
+    };
+    const M candidate_b = {
+        .a = {0.0, 0.0},
+        .b = upper,
+        .c = lower,
+        .d = y,
+    };
+    if (!matrix_finite(candidate_a) || !matrix_finite(candidate_b)) {
+        return false;
+    }
+    *a = candidate_a;
+    *b = candidate_b;
+    return true;
+}
+
 bool original_kleinian_generators(
     C ta,
     C tb,
