@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -245,10 +246,31 @@ jobs:
           name: indras-pearls-restored-candidate
           path: qemu-apk
 
+      - name: Check out shared qualified emulator mode admission
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 3c9297f63aa9af0d52304520c2177e75bf92e5ea
+          path: .ai-ci-charcoal
+          persist-credentials: false
+
+      - name: Download pinned modified Grease runtime
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          repository: dilapidated-shed/grease
+          run-id: 41253994123
+          artifact-ids: 13062637698
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          path: grease
+
+      - name: Qualify canonical Grease entrypoint
+        uses: ./.ai-ci-charcoal/.github/actions/charcoal-grease
+
       - name: Install decoded RGB comparison utility
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick
+          sudo apt-get install -y imagemagick ripgrep
 
       - name: Enable KVM access when available
         run: |
@@ -266,7 +288,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: bash tests/qemu-charcoal-modes.sh qemu-apk/app-debug.apk charcoal-modes ${{ matrix.api }}
+          script: bash tests/qemu-charcoal-modes.sh qemu-apk/app-debug.apk charcoal-modes ${{ matrix.api }} "$GITHUB_WORKSPACE/grease/bin/grease" "$GITHUB_WORKSPACE/.ai-ci-charcoal/charcoal/admit-system-mode.grease"
 
       - name: Retain API-specific mode/rotation/gesture receipts
         if: always()
