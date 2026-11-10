@@ -8,6 +8,9 @@ package="org.isomorphisms.indraspearls"
 mkdir -p "$out"
 printf 'state\tstarted\n' > "$out/status.tsv"
 test -f "$apk"
+# Keep the existing original GPU hash oracle explicitly opt-in.
+adb shell setprop debug.indras.gpu_probe 1
+trap 'adb shell setprop debug.indras.gpu_probe 0 >/dev/null 2>&1 || :' EXIT
 
 adb install -r "$apk" | tee "$out/install.txt"
 adb shell input keyevent KEYCODE_WAKEUP

@@ -13,6 +13,10 @@ adb install -r "$apk" | tee "$out/install.txt"
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 adb shell svc power stayon true
+# Readback is OFF by default for real interaction. Old observer tests
+# explicitly opt in and restore the ordinary mode on completion.
+adb shell setprop debug.indras.gpu_probe 1
+trap 'adb shell setprop debug.indras.gpu_probe 0 >/dev/null 2>&1 || :' EXIT
 adb logcat -c
 adb shell am force-stop "$package"
 adb shell am start -W -n "$package/android.app.NativeActivity" \

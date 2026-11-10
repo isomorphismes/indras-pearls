@@ -18,10 +18,11 @@ outside the controls retains the existing camera behavior.
 
 ## Build and signing boundaries
 
-The maintained application and host-test C frontend is ICK at
-`c61e448251744a2f40ad743ebef1a027bdcd2f9d`. The shared compiler and Android
-header qualification is pinned to
-`isomorphisms/ai-ci@4ea071a96239f3a29ca6d98454feb59947d87cfe`.
+The maintained host-test frontend remains ICK at
+`c61e448251744a2f40ad743ebef1a027bdcd2f9d`. Android application C uses ICK
+`fbe86e23d55cfec2000c08e61deea2a407fd7175` through the assembler-capability-qualified shared producer
+`isomorphisms/ai-ci@f6d825d15cd3c0c34ae1b43240a463ff5d343090`. Compiler-stage restoration uses
+the matching interface; no application C is substituted through NDK Clang.
 Every application-owned C translation unit is compiled to assembly by ICK;
 Android NDK `29.0.14206865` assembles it and links Android/EGL/GLES/Bionic.
 Unmodified NDK NativeActivity glue remains an NDK C stage. Those upstream,
@@ -59,3 +60,9 @@ incidental pixel changes; PNG file-byte differences are not the visual oracle.
 These tests run on an x86_64 Android emulator. They do not establish that the
 ARMv7 APK behaves correctly on the physical MIRO A1, or establish update
 continuity on that device. Keep those acceptance boundaries open.
+
+The first charcoal run41991968076 passes host mathematics and the ARMv7 compiler
+but the old ARM64/x86 qualifier emits .base64 rejected by the retained NDK29.
+The promoted compiler stage addresses that concrete assembler boundary. All
+Fortify2, stack-protection, warnings, three-ABI, strict freestanding and decoded
+raster/trace-control tests are retained. Current consumer execution must rerun.

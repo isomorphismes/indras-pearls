@@ -7,7 +7,7 @@
         android:hasCode="false"
         android:label="Indra's Pearls"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        android:theme="@style/Theme.IndrasCharcoal">
         <activity
             android:name="android.app.NativeActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|density"

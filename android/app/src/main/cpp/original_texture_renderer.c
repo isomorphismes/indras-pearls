@@ -47,7 +47,8 @@ static const char *fragment_shader_source =
     "\n"
     "        vec3 accent = control_accent(index);\n"
     "        float inside = 1.0 - smoothstep(0.96, 1.0, radius);\n"
-    "        color = mix(color, vec3(0.055, 0.060, 0.070), inside * 0.76);\n"
+    "        vec3 surface = index == u_active_control ? vec3(56.0 / 255.0) : vec3(47.0 / 255.0);\n"
+    "        color = mix(color, surface, inside);\n"
     "\n"
     "        float horizontal = 1.0 - smoothstep(0.010, 0.028, abs(local.y));\n"
     "        float vertical = 1.0 - smoothstep(0.010, 0.028, abs(local.x));\n"
@@ -203,21 +204,19 @@ bool upload_original_texture(
 
     glBindTexture(GL_TEXTURE_2D, renderer->texture);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA8,
-        width,
-        height,
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        rgba
-    );
+    /* Preserve the GPU allocation across touch updates. Reallocate only
+     * when EGL changes the framebuffer dimensions. */
+    if (renderer->width == width && renderer->height == height) {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
+                        GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    } else {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    }
     GLenum error = glGetError();
     glBindTexture(GL_TEXTURE_2D, 0);
     if (error != GL_NO_ERROR) {
-        LOGE("glTexImage2D failed: 0x%x", error);
+        LOGE("GLES texture upload failed: 0x%x", error);
         return false;
     }
 

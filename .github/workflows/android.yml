@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -31,7 +32,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: f6d825d15cd3c0c34ae1b43240a463ff5d343090
           path: .ai-ci-ick
           persist-credentials: false
       - name: Enforce the ICK and NDK stage declarations
@@ -83,7 +84,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: f6d825d15cd3c0c34ae1b43240a463ff5d343090
           path: .ai-ci-ick
           persist-credentials: false
 
@@ -145,6 +146,15 @@ jobs:
             sudo udevadm trigger --name-match=kvm
           fi
 
+      - uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        id: ick
+
+      - name: Build independent orientation oracle using qualified ICK
+        run: >-
+          make -f tests/Makefile build/host/original-android-gpu-oracle
+          ICK="${{ steps.ick.outputs.compiler }}"
+          ICK_LINK_FLAGS="${{ steps.ick.outputs.link_flags }}"
+
       - name: Prove original Kleinian raster reaches GPU and display
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
@@ -153,6 +163,21 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: bash tests/qemu-original-raster.sh qemu-apk/app-debug.apk qemu-original
+
+      - name: Prove rectangular GPU pixel coordinates (old layout negative control)
+        run: >-
+          bash tests/qemu-gpu-orientation.sh
+          qemu-original/display-full.png
+          build/host/original-android-gpu-oracle
+          qemu-orientation
+
+      - name: Retain rectangular geometry evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-gpu-orientation-${{ github.run_id }}
+          path: qemu-orientation/
+          if-no-files-found: ignore
 
       - name: Retain restored-raster evidence
         if: always()
@@ -204,6 +229,15 @@ jobs:
           disable-animations: true
           script: bash tests/qemu-original-trace-controls.sh qemu-apk/app-debug.apk qemu-original-traces
 
+      - name: Prove both controls remain responsive in ONE 60s process
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash tests/qemu-continuous-session.sh qemu-apk/app-debug.apk qemu-continuous
+
       - name: Publish emulator-accepted interactive APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -212,6 +246,8 @@ jobs:
             qemu-apk/app-debug.apk
             qemu-original-traces/status.tsv
             qemu-original-traces/results.tsv
+            qemu-continuous/status.tsv
+            qemu-continuous/latency.tsv
           if-no-files-found: error
 
       - name: Retain trace-control evidence
@@ -223,12 +259,93 @@ jobs:
           if-no-files-found: error
 
 
+      - name: Retain continuous-session acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-continuous-session-${{ github.run_id }}
+          path: qemu-continuous/
+          if-no-files-found: ignore
+
+  qemu-charcoal-modes:
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 34]
+    steps:
+      - name: Check out exact source under test
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download exact restored APK from this workflow
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: indras-pearls-restored-candidate
+          path: qemu-apk
+
+      - name: Check out shared qualified emulator mode admission
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 3c9297f63aa9af0d52304520c2177e75bf92e5ea
+          path: .ai-ci-charcoal
+          persist-credentials: false
+
+      - name: Download pinned modified Grease runtime
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          repository: dilapidated-shed/grease
+          run-id: 41253994123
+          artifact-ids: 13062637698
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          path: grease
+
+      - name: Qualify canonical Grease entrypoint
+        uses: ./.ai-ci-charcoal/.github/actions/charcoal-grease
+
+      - name: Install decoded RGB comparison utility
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick ripgrep
+
+      - name: Enable KVM access when available
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+              | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+          fi
+
+      - name: Verify actual API night modes, control pixels, rotation and original raster
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash tests/qemu-charcoal-modes.sh qemu-apk/app-debug.apk charcoal-modes ${{ matrix.api }} "$GITHUB_WORKSPACE/grease/bin/grease" "$GITHUB_WORKSPACE/.ai-ci-charcoal/charcoal/admit-system-mode.grease"
+
+      - name: Retain API-specific mode/rotation/gesture receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-charcoal-api${{ matrix.api }}-${{ github.run_id }}
+          path: charcoal-modes/
+          if-no-files-found: error
+
   ick-armv7-boundary:
     needs: compilers
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      ICK_COMMIT: c61e448251744a2f40ad743ebef1a027bdcd2f9d
+      ICK_COMMIT: fbe86e23d55cfec2000c08e61deea2a407fd7175
       ANDROID_NDK_VERSION: 29.0.14206865
       INDRAS_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       INDRAS_TEST_KEYSTORE_PASSWORD: wegert-debug
@@ -252,7 +369,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 4ea071a96239f3a29ca6d98454feb59947d87cfe
+          ref: f6d825d15cd3c0c34ae1b43240a463ff5d343090
           path: .ai-ci-ick
           persist-credentials: false
 
