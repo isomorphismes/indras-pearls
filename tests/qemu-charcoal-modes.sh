@@ -30,17 +30,28 @@ adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 0
 
 restore_device_configuration() {
+    adb shell cmd window user-rotation free >/dev/null 2>&1 || :
+    adb shell cmd window set-user-rotation free >/dev/null 2>&1 || :
+    adb shell setprop debug.indras.gpu_probe 0 >/dev/null 2>&1 || :
     adb shell settings put system user_rotation 0 >/dev/null 2>&1 || :
     adb shell settings put system accelerometer_rotation 1 >/dev/null 2>&1 || :
     adb shell cmd uimode night no >/dev/null 2>&1 || :
 }
 trap restore_device_configuration EXIT
 
+# cmd window performs a real WindowManager rotation lock; writing the
+# settings value alone failed to rotate the API34 emulator.
+rotate_emulator() {
+    adb shell cmd window user-rotation lock "$1" >/dev/null 2>&1 || \
+        adb shell cmd window set-user-rotation lock "$1" >/dev/null 2>&1
+}
+
 printf 'mode\tapi\tsystem_getter\tapp_qualifier\tcontrol_rgb\trotation\traster\ttraces\n' > "$out/results.tsv"
 
 check_mode() {
     mode="$1"
-    adb shell settings put system user_rotation 0
+    adb shell setprop debug.indras.gpu_probe 1
+    rotate_emulator 0
     # Use the verified account-wide disposable-emulator mode admission.
     # Android 10 requires privileged day/night permission and user setup.
     "$grease" "$admission" "$(command -v adb)" emulator-5554 \
@@ -105,7 +116,7 @@ check_mode() {
 
     # Check actual orientation/lifecycle response, not only a rotation request.
     adb logcat -c
-    adb shell settings put system user_rotation 1
+    rotate_emulator 1
     sleep 4
     adb exec-out screencap -p > "$out/rotated-$mode.png"
     test -s "$out/rotated-$mode.png"
@@ -116,7 +127,7 @@ check_mode() {
     test "$rotated_height" -eq "$width"
     adb logcat -d > "$out/rotated-$mode.log"
     grep -F "original GPU frame probe" "$out/rotated-$mode.log"
-    adb shell settings put system user_rotation 0
+    rotate_emulator 0
     sleep 4
 
     # The already accepted independent decoded-RGB and trace gestures run

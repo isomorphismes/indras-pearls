@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(indras_pearls_native C)
+find_package(Threads REQUIRED)
 
 set(NATIVE_GLUE_DIR "${CMAKE_ANDROID_NDK}/sources/android/native_app_glue")
 
@@ -18,6 +19,8 @@ endif()
 set(OWNED_C_SOURCES
     original_texture_renderer.c
     original_trace_controls.c
+    original_android_raster.c
+    original_raster_worker.c
     native_app_glue_stub.c
 )
 
@@ -64,4 +67,5 @@ target_link_libraries(indras_pearls
     GLESv3
     log
     m
+    Threads::Threads
 )

@@ -7,10 +7,12 @@ HEADERS = $(wildcard $(C_SOURCE_DIR)/*.h)
 HOST_FLAGS = -std=c17 -Wall -Wextra -Werror -pedantic -O2 -I$(C_SOURCE_DIR)
 
 .PHONY: test arm-boundary
-test: $(BUILD)/mobius-math $(BUILD)/original-kleinian $(BUILD)/original-trace-controls $(BUILD)/parameter-controls.o
+test: $(BUILD)/mobius-math $(BUILD)/original-kleinian $(BUILD)/original-trace-controls $(BUILD)/original-android-raster $(BUILD)/original-raster-worker $(BUILD)/parameter-controls.o
 	$(BUILD)/mobius-math
 	$(BUILD)/original-kleinian
 	$(BUILD)/original-trace-controls
+	$(BUILD)/original-android-raster
+	$(BUILD)/original-raster-worker
 
 $(BUILD):
 	mkdir -p "$@"
@@ -22,6 +24,18 @@ $(BUILD)/original-kleinian: $(C_SOURCE_DIR)/original_kleinian.c tests/original_k
 	$(ICK) $(ICK_OPTIONS) $(HOST_FLAGS) $(filter %.c,$^) $(ICK_LINK_FLAGS) -lm -o "$@"
 
 $(BUILD)/original-trace-controls: $(C_SOURCE_DIR)/original_kleinian.c $(C_SOURCE_DIR)/original_trace_controls.c tests/original_trace_controls_test.c $(HEADERS) | $(BUILD)
+	$(ICK) $(ICK_OPTIONS) $(HOST_FLAGS) $(filter %.c,$^) $(ICK_LINK_FLAGS) -lm -o "$@"
+
+$(BUILD)/original-android-raster: $(C_SOURCE_DIR)/original_kleinian.c $(C_SOURCE_DIR)/original_android_raster.c tests/original_android_raster_test.c $(HEADERS) | $(BUILD)
+	$(ICK) $(ICK_OPTIONS) $(HOST_FLAGS) $(filter %.c,$^) $(ICK_LINK_FLAGS) -lm -o "$@"
+
+$(BUILD)/original-raster-worker: $(C_SOURCE_DIR)/original_kleinian.c $(C_SOURCE_DIR)/original_android_raster.c $(C_SOURCE_DIR)/original_raster_worker.c tests/original_raster_worker_test.c $(HEADERS) | $(BUILD)
+	$(ICK) $(ICK_OPTIONS) $(HOST_FLAGS) -D_POSIX_C_SOURCE=200809L $(filter %.c,$^) $(ICK_LINK_FLAGS) -pthread -lm -o "$@"
+
+
+# Built with the SAME qualified ICK host compiler as the mathematical suite.
+# Used by the emulator pixel-coordinate acceptance, not linked into the APK.
+$(BUILD)/original-android-gpu-oracle: $(C_SOURCE_DIR)/original_kleinian.c $(C_SOURCE_DIR)/original_android_raster.c tests/original_android_gpu_oracle.c $(HEADERS) | $(BUILD)
 	$(ICK) $(ICK_OPTIONS) $(HOST_FLAGS) $(filter %.c,$^) $(ICK_LINK_FLAGS) -lm -o "$@"
 
 # Retained historical controls are compiled independently; they are not restored

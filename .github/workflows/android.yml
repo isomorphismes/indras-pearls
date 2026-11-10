@@ -146,6 +146,15 @@ jobs:
             sudo udevadm trigger --name-match=kvm
           fi
 
+      - uses: isomorphisms/ai-ci/ick-host@4ea071a96239f3a29ca6d98454feb59947d87cfe
+        id: ick
+
+      - name: Build independent orientation oracle using qualified ICK
+        run: >-
+          make -f tests/Makefile build/host/original-android-gpu-oracle
+          ICK="${{ steps.ick.outputs.compiler }}"
+          ICK_LINK_FLAGS="${{ steps.ick.outputs.link_flags }}"
+
       - name: Prove original Kleinian raster reaches GPU and display
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
@@ -154,6 +163,21 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: bash tests/qemu-original-raster.sh qemu-apk/app-debug.apk qemu-original
+
+      - name: Prove rectangular GPU pixel coordinates (old layout negative control)
+        run: >-
+          bash tests/qemu-gpu-orientation.sh
+          qemu-original/display-full.png
+          build/host/original-android-gpu-oracle
+          qemu-orientation
+
+      - name: Retain rectangular geometry evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-gpu-orientation-${{ github.run_id }}
+          path: qemu-orientation/
+          if-no-files-found: ignore
 
       - name: Retain restored-raster evidence
         if: always()
@@ -205,6 +229,15 @@ jobs:
           disable-animations: true
           script: bash tests/qemu-original-trace-controls.sh qemu-apk/app-debug.apk qemu-original-traces
 
+      - name: Prove both controls remain responsive in ONE 60s process
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash tests/qemu-continuous-session.sh qemu-apk/app-debug.apk qemu-continuous
+
       - name: Publish emulator-accepted interactive APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -213,6 +246,8 @@ jobs:
             qemu-apk/app-debug.apk
             qemu-original-traces/status.tsv
             qemu-original-traces/results.tsv
+            qemu-continuous/status.tsv
+            qemu-continuous/latency.tsv
           if-no-files-found: error
 
       - name: Retain trace-control evidence
@@ -224,6 +259,13 @@ jobs:
           if-no-files-found: error
 
 
+      - name: Retain continuous-session acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: indras-pearls-continuous-session-${{ github.run_id }}
+          path: qemu-continuous/
+          if-no-files-found: ignore
 
   qemu-charcoal-modes:
     needs: android
