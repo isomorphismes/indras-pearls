@@ -5,6 +5,7 @@
     <application
         android:allowBackup="false"
         android:hasCode="false"
+        android:icon="@drawable/ic_indras_pearls"
         android:label="Indra's Pearls"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
